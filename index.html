@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accounts — Payment Tracker</title>
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Google API client -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Flatpickr date picker -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <style>
+    :root {
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --amber:  #f59e0b;
+      --blue:   #3b82f6;
+      --bg:     #0f172a;
+      --card:   #1e293b;
+      --border: #334155;
+      --text:   #f1f5f9;
+      --muted:  #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── AUTH SCREEN ── */
+    #auth-screen {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; gap: 24px; text-align: center; padding: 24px;
+    }
+    #auth-screen h1 { font-size: 2rem; font-weight: 700; }
+    #auth-screen p  { color: var(--muted); max-width: 420px; line-height: 1.6; }
+    .btn-google {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #fff; color: #1a1a1a; border: none; border-radius: 8px;
+      padding: 12px 24px; font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-google:hover { opacity: .9; }
+    .btn-google img { width: 20px; height: 20px; }
+    .config-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; width: 100%; max-width: 500px; text-align: left;
+    }
+    .config-box h3 { margin-bottom: 12px; font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .config-box input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; color: var(--text); font-size: .95rem; margin-bottom: 8px;
+    }
+    .config-box input:focus { outline: none; border-color: var(--blue); }
+    .config-box small { color: var(--muted); font-size: .82rem; line-height: 1.5; display: block; margin-top: 4px; }
+
+    /* ── APP SHELL ── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+    header {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
+      height: 60px; position: sticky; top: 0; z-index: 100;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border); }
+    .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: .9rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: .82rem; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-danger { background: var(--red); color: #fff; }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
+
+    /* ── STAT CARDS ── */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+    }
+    .stat-card .label { font-size: .82rem; color: var(--muted); margin-bottom: 6px; }
+    .stat-card .value { font-size: 1.7rem; font-weight: 700; }
+    .stat-card.incoming .value { color: var(--green); }
+    .stat-card.outgoing .value { color: var(--red); }
+    .stat-card.net     .value { color: var(--blue); }
+    .stat-card.overdue .value { color: var(--amber); }
+
+    /* ── ALERTS ── */
+    #alert-bar { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .alert {
+      background: #451a03; border: 1px solid var(--amber); border-radius: 8px;
+      padding: 10px 16px; font-size: .88rem; display: flex; align-items: center; gap: 10px;
+    }
+    .alert.overdue-alert { background: #450a0a; border-color: var(--red); }
+
+    /* ── TABLE ── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+    }
+    .section-header h2 { font-size: 1rem; font-weight: 600; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-btn {
+      background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 14px; font-size: .82rem; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: var(--card); text-align: left; padding: 11px 14px; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
+    td { padding: 12px 14px; font-size: .9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.03); }
+
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600;
+    }
+    .badge-incoming { background: rgba(34,197,94,.15); color: var(--green); }
+    .badge-outgoing { background: rgba(239,68,68,.15); color: var(--red); }
+    .badge-paid     { background: rgba(34,197,94,.15); color: var(--green); }
+    .badge-pending  { background: rgba(59,130,246,.15); color: var(--blue); }
+    .badge-overdue  { background: rgba(239,68,68,.2);  color: var(--red); }
+    .badge-upcoming { background: rgba(245,158,11,.15); color: var(--amber); }
+
+    .amount-in  { color: var(--green); font-weight: 600; }
+    .amount-out { color: var(--red);   font-weight: 600; }
+
+    .row-actions { display: flex; gap: 6px; }
+
+    /* ── CHART ── */
+    .chart-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; margin-top: 24px;
+    }
+    .chart-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+    .chart-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+    #forecastChart { max-height: 300px; }
+
+    /* ── MODAL ── */
+    .overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: .83rem; color: var(--muted); margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; color: var(--text); font-size: .95rem; font-family: inherit;
+    }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--blue); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+    /* ── MISC ── */
+    .empty { text-align: center; padding: 40px; color: var(--muted); }
+    .spinner { text-align: center; padding: 40px; color: var(--muted); font-size: .9rem; }
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px;
+      font-size: .9rem; z-index: 9999; opacity: 0; transition: opacity .3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    #toast.success { border-color: var(--green); }
+    #toast.error   { border-color: var(--red); }
+
+    @media (max-width: 600px) {
+      main { padding: 16px; }
+      .form-row { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ AUTH SCREEN ══════════════ -->
+<div id="auth-screen">
+  <div style="font-size:3rem">💼</div>
+  <h1>Accounts Tracker</h1>
+  <p>Track incoming &amp; outgoing payments, get overdue alerts, and forecast your cash flow — all stored in your Google Sheet.</p>
+
+  <div class="config-box">
+    <h3>Configuration</h3>
+    <input id="cfg-client-id" placeholder="Google OAuth Client ID  (*.apps.googleusercontent.com)" />
+    <input id="cfg-sheet-id"  placeholder="Google Sheet ID  (from the sheet URL)" />
+    <small>
+      Need help? See the <strong>Setup Guide</strong> below. Your credentials are saved only in your browser.
+    </small>
+  </div>
+
+  <button class="btn-google" onclick="startAuth()">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+    Sign in with Google
+  </button>
+
+  <div class="config-box" style="margin-top:8px">
+    <h3>📋 Setup Guide (one-time)</h3>
+    <small>
+      1. Go to <strong>console.cloud.google.com</strong> → New Project.<br/>
+      2. Enable <strong>Google Sheets API</strong>.<br/>
+      3. Create <strong>OAuth 2.0 credentials</strong> → Web app → add <code>http://localhost</code> and the URL you use to open this file as authorized JS origins. Paste the <strong>Client ID</strong> above.<br/>
+      4. Create a new <strong>Google Sheet</strong>. Copy its ID from the URL (the long string between /d/ and /edit). Paste the <strong>Sheet ID</strong> above.<br/>
+      5. Click <em>Sign in with Google</em> — the app will create the required columns automatically.
+    </small>
+  </div>
+</div>
+
+<!-- ══════════════ APP ══════════════ -->
+<div id="app">
+  <header>
+    <h1>💼 Accounts Tracker</h1>
+    <div class="header-right">
+      <img id="user-avatar" class="avatar" src="" alt="" style="display:none" />
+      <span id="user-name" style="font-size:.88rem;color:var(--muted)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- STAT CARDS -->
+    <div class="stats">
+      <div class="stat-card incoming">
+        <div class="label">Total Incoming (pending)</div>
+        <div class="value" id="stat-in">—</div>
+      </div>
+      <div class="stat-card outgoing">
+        <div class="label">Total Outgoing (pending)</div>
+        <div class="value" id="stat-out">—</div>
+      </div>
+      <div class="stat-card net">
+        <div class="label">Net Cash Flow</div>
+        <div class="value" id="stat-net">—</div>
+      </div>
+      <div class="stat-card overdue">
+        <div class="label">Overdue Payments</div>
+        <div class="value" id="stat-overdue">—</div>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div id="alert-bar"></div>
+
+    <!-- PAYMENT LIST -->
+    <div class="section-header">
+      <h2>Payments</h2>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Add Payment</button>
+    </div>
+
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all"      onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn"        data-filter="incoming" onclick="setFilter('incoming',this)">Incoming</button>
+      <button class="filter-btn"        data-filter="outgoing" onclick="setFilter('outgoing',this)">Outgoing</button>
+      <button class="filter-btn"        data-filter="overdue"  onclick="setFilter('overdue',this)">Overdue</button>
+      <button class="filter-btn"        data-filter="upcoming" onclick="setFilter('upcoming',this)">Due Soon</button>
+      <button class="filter-btn"        data-filter="pending"  onclick="setFilter('pending',this)">Pending</button>
+      <button class="filter-btn"        data-filter="paid"     onclick="setFilter('paid',this)">Paid</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Party</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Due Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="payments-tbody">
+          <tr><td colspan="7" class="spinner">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- FORECAST CHART -->
+    <div class="chart-card">
+      <h2>Cash Flow Forecast</h2>
+      <div class="chart-controls">
+        <button class="filter-btn active" onclick="setChartRange(3,this)">3 Months</button>
+        <button class="filter-btn"        onclick="setChartRange(6,this)">6 Months</button>
+        <button class="filter-btn"        onclick="setChartRange(12,this)">12 Months</button>
+      </div>
+      <canvas id="forecastChart"></canvas>
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════ MODAL ══════════════ -->
+<div class="overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <h2 id="modal-title">Add Payment</h2>
+    <input type="hidden" id="edit-row-index" />
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="f-type">
+          <option value="Incoming">Incoming</option>
+          <option value="Outgoing">Outgoing</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="f-status">
+          <option value="Pending">Pending</option>
+          <option value="Paid">Paid</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <input id="f-desc" placeholder="e.g. Invoice #1042, Rent, Supplier payment…" />
+    </div>
+
+    <div class="form-group">
+      <label>Party (client / vendor name)</label>
+      <input id="f-party" placeholder="e.g. Acme Corp" />
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Amount</label>
+        <input id="f-amount" type="number" placeholder="0.00" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Currency</label>
+        <select id="f-currency">
+          <option>USD</option><option>EUR</option><option>GBP</option>
+          <option>AED</option><option>SAR</option><option>PKR</option>
+          <option>INR</option><option>CAD</option><option>AUD</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Due Date</label>
+      <input id="f-due" placeholder="YYYY-MM-DD" />
+    </div>
+
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <textarea id="f-notes" rows="2" placeholder="Any additional details…"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePayment()">Save Payment</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════
+//  CONFIG + STATE
+// ════════════════════════════════════════════
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const SHEET_NAME = 'Payments';
+const COLS = ['ID','Type','Description','Party','Amount','Currency','DueDate','Status','Notes'];
+// Row index in sheet (1-based header, data from row 2)
+
+let CLIENT_ID = '';
+let SHEET_ID  = '';
+let tokenClient;
+let accessToken = null;
+let allPayments  = [];
+let chartRange   = 3;
+let currentFilter = 'all';
+let forecastChart = null;
+
+// ════════════════════════════════════════════
+//  INIT / AUTH
+// ════════════════════════════════════════════
+window.onload = () => {
+  CLIENT_ID = localStorage.getItem('acct_client_id') || '';
+  SHEET_ID  = localStorage.getItem('acct_sheet_id')  || '';
+  document.getElementById('cfg-client-id').value = CLIENT_ID;
+  document.getElementById('cfg-sheet-id').value  = SHEET_ID;
+
+  // Restore saved token
+  const saved = sessionStorage.getItem('acct_token');
+  if (saved) {
+    accessToken = saved;
+    showApp();
+    loadPayments();
+  }
+
+  // Flatpickr
+  flatpickr('#f-due', { dateFormat: 'Y-m-d', allowInput: true });
+};
+
+function startAuth() {
+  CLIENT_ID = document.getElementById('cfg-client-id').value.trim();
+  SHEET_ID  = document.getElementById('cfg-sheet-id').value.trim();
+  if (!CLIENT_ID || !SHEET_ID) {
+    showToast('Please enter both Client ID and Sheet ID.', 'error');
+    return;
+  }
+  localStorage.setItem('acct_client_id', CLIENT_ID);
+  localStorage.setItem('acct_sheet_id',  SHEET_ID);
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showToast('Auth error: ' + resp.error, 'error'); return; }
+      accessToken = resp.access_token;
+      sessionStorage.setItem('acct_token', accessToken);
+      await fetchUserInfo();
+      showApp();
+      await ensureSheetHeaders();
+      loadPayments();
+    }
+  });
+  tokenClient.requestAccessToken();
+}
+
+async function fetchUserInfo() {
+  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!r.ok) return;
+  const info = await r.json();
+  document.getElementById('user-name').textContent = info.name || info.email || '';
+  const av = document.getElementById('user-avatar');
+  if (info.picture) { av.src = info.picture; av.style.display = 'block'; }
+}
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+}
+
+function signOut() {
+  accessToken = null;
+  sessionStorage.removeItem('acct_token');
+  location.reload();
+}
+
+// ════════════════════════════════════════════
+//  SHEETS API HELPERS
+// ════════════════════════════════════════════
+async function sheetsGet(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (r.status === 401) { signOut(); return null; }
+  return r.json();
+}
+
+async function sheetsAppend(values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  return fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+}
+
+async function sheetsUpdate(range, values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  return fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+}
+
+async function ensureSheetHeaders() {
+  const data = await sheetsGet(`${SHEET_NAME}!A1:Z1`);
+  if (!data || !data.values || !data.values[0] || data.values[0][0] !== 'ID') {
+    await sheetsUpdate(`${SHEET_NAME}!A1`, [COLS]);
+  }
+}
+
+// ════════════════════════════════════════════
+//  LOAD & RENDER PAYMENTS
+// ════════════════════════════════════════════
+async function loadPayments() {
+  const data = await sheetsGet(`${SHEET_NAME}!A2:I1000`);
+  allPayments = [];
+  if (data && data.values) {
+    allPayments = data.values
+      .filter(r => r[0]) // skip empty rows
+      .map((r, i) => ({
+        rowIndex: i + 2, // 1-based sheet row
+        id:          r[0] || '',
+        type:        r[1] || '',
+        description: r[2] || '',
+        party:       r[3] || '',
+        amount:      parseFloat(r[4]) || 0,
+        currency:    r[5] || 'USD',
+        dueDate:     r[6] || '',
+        status:      computeStatus(r[7], r[6]),
+        rawStatus:   r[7] || 'Pending',
+        notes:       r[8] || ''
+      }));
+  }
+  renderPayments();
+  renderStats();
+  renderAlerts();
+  renderChart();
+}
+
+function computeStatus(rawStatus, dueDate) {
+  if (rawStatus === 'Paid') return 'Paid';
+  if (!dueDate) return 'Pending';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due   = new Date(dueDate);
+  if (due < today) return 'Overdue';
+  const diff = (due - today) / 86400000;
+  if (diff <= 7) return 'Upcoming';
+  return 'Pending';
+}
+
+function renderPayments() {
+  const tbody = document.getElementById('payments-tbody');
+  let rows = allPayments;
+
+  if (currentFilter !== 'all') {
+    if (currentFilter === 'incoming') rows = rows.filter(p => p.type === 'Incoming');
+    else if (currentFilter === 'outgoing') rows = rows.filter(p => p.type === 'Outgoing');
+    else rows = rows.filter(p => p.status.toLowerCase() === currentFilter);
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">No payments found.</td></tr>`;
+    return;
+  }
+
+  rows.sort((a,b) => {
+    if (!a.dueDate) return 1; if (!b.dueDate) return -1;
+    return new Date(a.dueDate) - new Date(b.dueDate);
+  });
+
+  tbody.innerHTML = rows.map(p => `
+    <tr>
+      <td>${esc(p.description)}</td>
+      <td>${esc(p.party)}</td>
+      <td><span class="badge badge-${p.type.toLowerCase()}">${p.type}</span></td>
+      <td class="${p.type === 'Incoming' ? 'amount-in' : 'amount-out'}">
+        ${p.type === 'Incoming' ? '+' : '-'}${fmt(p.amount, p.currency)}
+      </td>
+      <td>${p.dueDate || '—'}</td>
+      <td><span class="badge badge-${p.status.toLowerCase()}">${p.status}</span></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="editPayment(${p.rowIndex})">Edit</button>
+          ${p.rawStatus !== 'Paid'
+            ? `<button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="markPaid(${p.rowIndex})">Mark Paid</button>`
+            : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderStats() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pending = allPayments.filter(p => p.rawStatus !== 'Paid');
+  const totalIn  = pending.filter(p => p.type === 'Incoming').reduce((s,p) => s + p.amount, 0);
+  const totalOut = pending.filter(p => p.type === 'Outgoing').reduce((s,p) => s + p.amount, 0);
+  const net      = totalIn - totalOut;
+  const overdue  = allPayments.filter(p => p.status === 'Overdue').length;
+
+  document.getElementById('stat-in').textContent      = fmtNum(totalIn);
+  document.getElementById('stat-out').textContent     = fmtNum(totalOut);
+  document.getElementById('stat-net').textContent     = (net >= 0 ? '+' : '') + fmtNum(net);
+  document.getElementById('stat-net').style.color     = net >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('stat-overdue').textContent = overdue;
+}
+
+function renderAlerts() {
+  const bar = document.getElementById('alert-bar');
+  bar.innerHTML = '';
+  const overdue  = allPayments.filter(p => p.status === 'Overdue');
+  const upcoming = allPayments.filter(p => p.status === 'Upcoming');
+
+  overdue.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'alert overdue-alert';
+    div.innerHTML = `🔴 <strong>Overdue:</strong> ${esc(p.description)} (${p.party}) — ${fmt(p.amount, p.currency)} was due on ${p.dueDate}`;
+    bar.appendChild(div);
+  });
+  upcoming.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'alert';
+    div.innerHTML = `⚠️ <strong>Due soon:</strong> ${esc(p.description)} (${p.party}) — ${fmt(p.amount, p.currency)} due on ${p.dueDate}`;
+    bar.appendChild(div);
+  });
+}
+
+// ════════════════════════════════════════════
+//  FORECAST CHART
+// ════════════════════════════════════════════
+function renderChart() {
+  const months = [];
+  const inArr  = [];
+  const outArr = [];
+  const netArr = [];
+  const today  = new Date();
+
+  for (let i = 0; i < chartRange; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+    months.push(label);
+
+    const mo = d.getMonth(), yr = d.getFullYear();
+    const inMonth = allPayments
+      .filter(p => p.rawStatus !== 'Paid' && p.type === 'Incoming' && p.dueDate)
+      .filter(p => { const dd = new Date(p.dueDate); return dd.getMonth() === mo && dd.getFullYear() === yr; })
+      .reduce((s,p) => s + p.amount, 0);
+    const outMonth = allPayments
+      .filter(p => p.rawStatus !== 'Paid' && p.type === 'Outgoing' && p.dueDate)
+      .filter(p => { const dd = new Date(p.dueDate); return dd.getMonth() === mo && dd.getFullYear() === yr; })
+      .reduce((s,p) => s + p.amount, 0);
+
+    inArr.push(inMonth);
+    outArr.push(outMonth);
+    netArr.push(inMonth - outMonth);
+  }
+
+  if (forecastChart) forecastChart.destroy();
+  forecastChart = new Chart(document.getElementById('forecastChart'), {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: [
+        { label: 'Incoming', data: inArr,  backgroundColor: 'rgba(34,197,94,.6)',  borderColor: '#22c55e', borderWidth: 1 },
+        { label: 'Outgoing', data: outArr, backgroundColor: 'rgba(239,68,68,.6)',  borderColor: '#ef4444', borderWidth: 1 },
+        { label: 'Net',      data: netArr, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)', tension: .4, fill: true, pointBackgroundColor: '#3b82f6' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#94a3b8' } } },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+      }
+    }
+  });
+}
+
+function setChartRange(n, el) {
+  chartRange = n;
+  document.querySelectorAll('.chart-controls .filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderChart();
+}
+
+// ════════════════════════════════════════════
+//  FILTER
+// ════════════════════════════════════════════
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderPayments();
+}
+
+// ════════════════════════════════════════════
+//  MODAL
+// ════════════════════════════════════════════
+function openModal(payment) {
+  document.getElementById('modal-title').textContent = payment ? 'Edit Payment' : 'Add Payment';
+  document.getElementById('edit-row-index').value = payment ? payment.rowIndex : '';
+  document.getElementById('f-type').value     = payment ? payment.type     : 'Incoming';
+  document.getElementById('f-status').value   = payment ? payment.rawStatus: 'Pending';
+  document.getElementById('f-desc').value     = payment ? payment.description: '';
+  document.getElementById('f-party').value    = payment ? payment.party    : '';
+  document.getElementById('f-amount').value   = payment ? payment.amount   : '';
+  document.getElementById('f-currency').value = payment ? payment.currency : 'USD';
+  document.getElementById('f-due').value      = payment ? payment.dueDate  : '';
+  document.getElementById('f-notes').value    = payment ? payment.notes    : '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal()  { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOutside(e) { if (e.target.id === 'modal-overlay') closeModal(); }
+
+function editPayment(rowIndex) {
+  const p = allPayments.find(x => x.rowIndex === rowIndex);
+  if (p) openModal(p);
+}
+
+async function savePayment() {
+  const desc   = document.getElementById('f-desc').value.trim();
+  const amount = parseFloat(document.getElementById('f-amount').value);
+  const due    = document.getElementById('f-due').value.trim();
+
+  if (!desc) { showToast('Description is required.', 'error'); return; }
+  if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
+
+  const row = [
+    document.getElementById('edit-row-index').value || Date.now().toString(),
+    document.getElementById('f-type').value,
+    desc,
+    document.getElementById('f-party').value.trim(),
+    amount,
+    document.getElementById('f-currency').value,
+    due,
+    document.getElementById('f-status').value,
+    document.getElementById('f-notes').value.trim()
+  ];
+
+  const rowIdx = document.getElementById('edit-row-index').value;
+  if (rowIdx) {
+    await sheetsUpdate(`${SHEET_NAME}!A${rowIdx}:I${rowIdx}`, [row]);
+    showToast('Payment updated.', 'success');
+  } else {
+    await sheetsAppend([row]);
+    showToast('Payment added.', 'success');
+  }
+  closeModal();
+  await loadPayments();
+}
+
+async function markPaid(rowIndex) {
+  const p = allPayments.find(x => x.rowIndex === rowIndex);
+  if (!p) return;
+  const row = [p.id, p.type, p.description, p.party, p.amount, p.currency, p.dueDate, 'Paid', p.notes];
+  await sheetsUpdate(`${SHEET_NAME}!A${rowIndex}:I${rowIndex}`, [row]);
+  showToast('Marked as paid!', 'success');
+  await loadPayments();
+}
+
+// ════════════════════════════════════════════
+//  UTILITIES
+// ════════════════════════════════════════════
+function fmt(n, currency='USD') {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n);
+}
+function fmtNum(n) {
+  return new Intl.NumberFormat('en-US', { style: 'decimal', maximumFractionDigits: 2 }).format(Math.abs(n));
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3000);
+}
+</script>
+</body>
+</html>
