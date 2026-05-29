@@ -137,17 +137,21 @@
       position: relative; overflow: hidden;
     }
     .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-    .stat-card.incoming::before { background: var(--green); }
-    .stat-card.outgoing::before { background: var(--red); }
-    .stat-card.net::before     { background: var(--blue); }
-    .stat-card.overdue::before { background: var(--amber); }
+    .stat-card.cash::before      { background: #a855f7; }
+    .stat-card.projected::before { background: #06b6d4; }
+    .stat-card.incoming::before  { background: var(--green); }
+    .stat-card.outgoing::before  { background: var(--red); }
+    .stat-card.net::before       { background: var(--blue); }
+    .stat-card.overdue::before   { background: var(--amber); }
     .stat-card .s-label { font-size: .78rem; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em; }
     .stat-card .s-value { font-size: 1.75rem; font-weight: 800; line-height: 1; }
     .stat-card .s-sub   { font-size: .78rem; color: var(--muted); margin-top: 6px; }
-    .stat-card.incoming .s-value { color: var(--green); }
-    .stat-card.outgoing .s-value { color: var(--red); }
-    .stat-card.net      .s-value { color: var(--blue); }
-    .stat-card.overdue  .s-value { color: var(--amber); }
+    .stat-card.cash      .s-value { color: #a855f7; }
+    .stat-card.projected .s-value { color: #06b6d4; }
+    .stat-card.incoming  .s-value { color: var(--green); }
+    .stat-card.outgoing  .s-value { color: var(--red); }
+    .stat-card.net       .s-value { color: var(--blue); }
+    .stat-card.overdue   .s-value { color: var(--amber); }
 
     /* ── ALERTS ── */
     #alert-bar { margin-bottom: 22px; display: flex; flex-direction: column; gap: 8px; }
@@ -345,6 +349,11 @@
   <main>
     <!-- STAT CARDS -->
     <div class="stats">
+      <div class="stat-card cash" onclick="openCashModal()" style="cursor:pointer" title="Click to update">
+        <div class="s-label">Current Cash <span style="font-size:.7rem;color:var(--muted)">✎</span></div>
+        <div class="s-value" id="stat-cash">—</div>
+        <div class="s-sub">Click to update</div>
+      </div>
       <div class="stat-card incoming">
         <div class="s-label">Incoming (pending)</div>
         <div class="s-value" id="stat-in">—</div>
@@ -354,6 +363,11 @@
         <div class="s-label">Outgoing (pending)</div>
         <div class="s-value" id="stat-out">—</div>
         <div class="s-sub"  id="stat-out-count">—</div>
+      </div>
+      <div class="stat-card projected">
+        <div class="s-label">Projected Balance</div>
+        <div class="s-value" id="stat-projected">—</div>
+        <div class="s-sub">Cash + Incoming − Outgoing</div>
       </div>
       <div class="stat-card net">
         <div class="s-label">Net Cash Flow</div>
@@ -481,6 +495,29 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="savePayment()">Save Payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- CASH MODAL -->
+<div class="overlay" id="cash-overlay" onclick="overlayClick(event,'cash-overlay')">
+  <div class="modal" style="max-width:360px">
+    <h2>Update Current Cash</h2>
+    <div class="form-group">
+      <label>CURRENCY</label>
+      <select id="cash-currency">
+        <option>USD</option><option>EUR</option><option>GBP</option>
+        <option>AED</option><option>SAR</option><option>PKR</option>
+        <option>INR</option><option>CAD</option><option>AUD</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>CURRENT CASH BALANCE</label>
+      <input id="cash-amount" type="number" placeholder="0.00" min="0" step="0.01" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCashModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCash()">Save</button>
     </div>
   </div>
 </div>
@@ -618,6 +655,44 @@ function signOut() {
 function paymentsRef() {
   return db.collection('users').doc(currentUser.uid).collection('payments');
 }
+function settingsRef() {
+  return db.collection('users').doc(currentUser.uid);
+}
+
+// ═══════════════════════════════════════════════════
+//  CURRENT CASH
+// ═══════════════════════════════════════════════════
+let currentCash = 0;
+let currentCashCurrency = 'USD';
+
+async function loadCash() {
+  const snap = await settingsRef().get();
+  if (snap.exists && snap.data().cash !== undefined) {
+    currentCash = snap.data().cash || 0;
+    currentCashCurrency = snap.data().cashCurrency || 'USD';
+  }
+  renderStats();
+}
+
+function openCashModal() {
+  document.getElementById('cash-amount').value   = currentCash || '';
+  document.getElementById('cash-currency').value = currentCashCurrency || 'USD';
+  document.getElementById('cash-overlay').classList.add('open');
+}
+function closeCashModal() {
+  document.getElementById('cash-overlay').classList.remove('open');
+}
+async function saveCash() {
+  const amount   = parseFloat(document.getElementById('cash-amount').value);
+  const currency = document.getElementById('cash-currency').value;
+  if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount.','error'); return; }
+  await settingsRef().set({ cash: amount, cashCurrency: currency }, { merge: true });
+  currentCash = amount;
+  currentCashCurrency = currency;
+  closeCashModal();
+  renderStats();
+  showToast('Cash balance updated.','success');
+}
 
 // ═══════════════════════════════════════════════════
 //  STATE
@@ -633,6 +708,7 @@ let unsubscribe   = null;
 //  REAL-TIME SUBSCRIPTION
 // ═══════════════════════════════════════════════════
 function subscribePayments() {
+  loadCash();
   if (unsubscribe) unsubscribe();
   unsubscribe = paymentsRef()
     .orderBy('dueDate', 'asc')
@@ -710,23 +786,28 @@ function renderPayments() {
 }
 
 function renderStats() {
-  const pending = allPayments.filter(p => p.status !== 'Paid');
-  const inList  = pending.filter(p => p.type === 'Incoming');
-  const outList = pending.filter(p => p.type === 'Outgoing');
-  const totalIn  = inList.reduce((s,p) => s + (p.amount||0), 0);
+  const pending  = allPayments.filter(p => p.status !== 'Paid');
+  const inList   = pending.filter(p => p.type === 'Incoming');
+  const outList  = pending.filter(p => p.type === 'Outgoing');
+  const totalIn  = inList.reduce((s,p)  => s + (p.amount||0), 0);
   const totalOut = outList.reduce((s,p) => s + (p.amount||0), 0);
   const net      = totalIn - totalOut;
+  const projected = currentCash + totalIn - totalOut;
   const overList = allPayments.filter(p => p.computedStatus === 'Overdue');
   const overAmt  = overList.reduce((s,p) => s + (p.amount||0), 0);
 
+  document.getElementById('stat-cash').textContent      = fmt(currentCash, currentCashCurrency);
   document.getElementById('stat-in').textContent        = fmtShort(totalIn);
   document.getElementById('stat-in-count').textContent  = `${inList.length} payment${inList.length!==1?'s':''}`;
   document.getElementById('stat-out').textContent       = fmtShort(totalOut);
   document.getElementById('stat-out-count').textContent = `${outList.length} payment${outList.length!==1?'s':''}`;
+  const projEl = document.getElementById('stat-projected');
+  projEl.textContent   = fmt(projected, currentCashCurrency);
+  projEl.style.color   = projected >= 0 ? '#06b6d4' : 'var(--red)';
   document.getElementById('stat-net').textContent       = (net>=0?'+':'')+fmtShort(net);
   document.getElementById('stat-net').style.color       = net>=0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('stat-overdue').textContent   = overList.length;
-  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmtShort(overAmt) + ' at risk' : 'All clear';
+  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmtShort(overAmt)+' at risk' : 'All clear';
 }
 
 function renderAlerts() {
