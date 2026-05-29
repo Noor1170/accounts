@@ -58,20 +58,37 @@
     .card ol li { color: var(--muted); font-size: .85rem; line-height: 2; }
     .card ol li strong { color: var(--text); }
 
-    .btn-google {
-      display: inline-flex; align-items: center; gap: 12px;
-      background: #fff; color: #1a1a1a; border: none; border-radius: 10px;
-      padding: 13px 28px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: opacity .15s;
-      box-shadow: 0 4px 20px rgba(0,0,0,.4);
-    }
-    .btn-google:hover { opacity: .92; }
-    .btn-google img { width: 22px; }
-
     .btn-save {
       background: var(--blue); color: #fff; border: none; border-radius: 10px;
       padding: 11px 24px; font-size: .95rem; font-weight: 600; cursor: pointer; transition: opacity .15s; width: 100%; margin-top: 4px;
     }
     .btn-save:hover { opacity: .87; }
+
+    /* auth form */
+    .auth-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      padding: 32px; width: 100%; max-width: 420px; text-align: left;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .auth-card h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
+    .auth-card .sub { color: var(--muted); font-size: .88rem; margin-bottom: 24px; }
+    .auth-input-wrap { margin-bottom: 14px; }
+    .auth-input-wrap label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 6px; letter-spacing: .05em; }
+    .auth-input-wrap input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; color: var(--text); font-size: .95rem; transition: border-color .2s;
+    }
+    .auth-input-wrap input:focus { outline: none; border-color: var(--blue); }
+    .auth-btn {
+      width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 10px;
+      padding: 13px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 6px; transition: opacity .15s;
+    }
+    .auth-btn:hover { opacity: .87; }
+    .auth-switch { text-align: center; margin-top: 18px; font-size: .87rem; color: var(--muted); }
+    .auth-switch a { color: var(--blue); cursor: pointer; text-decoration: underline; }
+    .auth-error { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; font-size: .85rem; color: var(--red); margin-bottom: 14px; display: none; }
+    .forgot { text-align: right; font-size: .8rem; color: var(--blue); cursor: pointer; margin-top: -8px; margin-bottom: 14px; }
+    .forgot:hover { text-decoration: underline; }
 
     /* ── APP SHELL ── */
     #app { display: none; flex-direction: column; min-height: 100vh; }
@@ -259,7 +276,7 @@
     <ol>
       <li>Go to <strong>console.firebase.google.com</strong> → <strong>Add project</strong></li>
       <li>In the project, click <strong>Web</strong> (</>) → register app → copy the <code>firebaseConfig</code> values above</li>
-      <li>Go to <strong>Build → Authentication</strong> → Sign-in method → enable <strong>Google</strong></li>
+      <li>Go to <strong>Build → Authentication</strong> → Sign-in method → enable <strong>Email/Password</strong></li>
       <li>Go to <strong>Build → Firestore Database</strong> → Create database → Start in <strong>production mode</strong></li>
       <li>In Firestore → <strong>Rules</strong>, paste:
         <pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;font-size:.78rem;overflow-x:auto;color:var(--text)">rules_version = '2';
@@ -281,13 +298,64 @@ service cloud.firestore {
      AUTH SCREEN
 ══════════════════════════════════════ -->
 <div id="screen-auth" class="screen">
-  <div class="logo">🔐</div>
-  <h1>Sign in to continue</h1>
-  <p>Your data is stored securely in the cloud, tied to your Google account. Nobody else can see it.</p>
-  <button class="btn-google" onclick="signInWithGoogle()">
-    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
-    Continue with Google
-  </button>
+  <!-- LOGIN FORM -->
+  <div id="form-login" class="auth-card">
+    <div style="font-size:2rem;margin-bottom:12px">💼</div>
+    <h2>Welcome back</h2>
+    <p class="sub">Sign in to your Accounts Tracker</p>
+    <div class="auth-error" id="login-error"></div>
+    <div class="auth-input-wrap">
+      <label>EMAIL ADDRESS</label>
+      <input id="login-email" type="email" placeholder="you@example.com" />
+    </div>
+    <div class="auth-input-wrap">
+      <label>PASSWORD</label>
+      <input id="login-password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <div class="forgot" onclick="doForgotPassword()">Forgot password?</div>
+    <button class="auth-btn" onclick="doLogin()">Sign In →</button>
+    <div class="auth-switch">Don't have an account? <a onclick="showForm('register')">Create one</a></div>
+  </div>
+
+  <!-- REGISTER FORM -->
+  <div id="form-register" class="auth-card" style="display:none">
+    <div style="font-size:2rem;margin-bottom:12px">💼</div>
+    <h2>Create account</h2>
+    <p class="sub">Start tracking your payments today</p>
+    <div class="auth-error" id="register-error"></div>
+    <div class="auth-input-wrap">
+      <label>FULL NAME</label>
+      <input id="reg-name" type="text" placeholder="John Smith" />
+    </div>
+    <div class="auth-input-wrap">
+      <label>EMAIL ADDRESS</label>
+      <input id="reg-email" type="email" placeholder="you@example.com" />
+    </div>
+    <div class="auth-input-wrap">
+      <label>PASSWORD</label>
+      <input id="reg-password" type="password" placeholder="Min. 6 characters" />
+    </div>
+    <div class="auth-input-wrap">
+      <label>CONFIRM PASSWORD</label>
+      <input id="reg-confirm" type="password" placeholder="Repeat password" onkeydown="if(event.key==='Enter')doRegister()" />
+    </div>
+    <button class="auth-btn" onclick="doRegister()">Create Account →</button>
+    <div class="auth-switch">Already have an account? <a onclick="showForm('login')">Sign in</a></div>
+  </div>
+
+  <!-- FORGOT PASSWORD FORM -->
+  <div id="form-forgot" class="auth-card" style="display:none">
+    <div style="font-size:2rem;margin-bottom:12px">🔑</div>
+    <h2>Reset password</h2>
+    <p class="sub">We'll send a reset link to your email</p>
+    <div class="auth-error" id="forgot-error"></div>
+    <div class="auth-input-wrap">
+      <label>EMAIL ADDRESS</label>
+      <input id="forgot-email" type="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')doForgotSend()" />
+    </div>
+    <button class="auth-btn" onclick="doForgotSend()">Send Reset Link →</button>
+    <div class="auth-switch"><a onclick="showForm('login')">← Back to sign in</a></div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════
@@ -536,13 +604,77 @@ function showApp(user) {
 // ═══════════════════════════════════════════════════
 let currentUser = null;
 
-function signInWithGoogle() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(e => showToast(e.message, 'error'));
+function showForm(name) {
+  ['login','register','forgot'].forEach(f => {
+    document.getElementById('form-'+f).style.display = f===name ? 'block' : 'none';
+  });
+  ['login-error','register-error','forgot-error'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display='none'; el.textContent=''; }
+  });
+}
+
+function authError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = 'block';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  if (!email || !pass) { authError('login-error','Please enter your email and password.'); return; }
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e) {
+    authError('login-error', friendlyError(e.code));
+  }
+}
+
+async function doRegister() {
+  const name    = document.getElementById('reg-name').value.trim();
+  const email   = document.getElementById('reg-email').value.trim();
+  const pass    = document.getElementById('reg-password').value;
+  const confirm = document.getElementById('reg-confirm').value;
+  if (!email || !pass)      { authError('register-error','Email and password are required.'); return; }
+  if (pass.length < 6)      { authError('register-error','Password must be at least 6 characters.'); return; }
+  if (pass !== confirm)     { authError('register-error','Passwords do not match.'); return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    if (name) await cred.user.updateProfile({ displayName: name });
+  } catch(e) {
+    authError('register-error', friendlyError(e.code));
+  }
+}
+
+async function doForgotPassword() { showForm('forgot'); }
+
+async function doForgotSend() {
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) { authError('forgot-error','Please enter your email address.'); return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showToast('Reset link sent — check your inbox.','success');
+    showForm('login');
+  } catch(e) {
+    authError('forgot-error', friendlyError(e.code));
+  }
+}
+
+function friendlyError(code) {
+  const map = {
+    'auth/user-not-found':       'No account found with this email.',
+    'auth/wrong-password':       'Incorrect password. Try again.',
+    'auth/invalid-email':        'Please enter a valid email address.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password':        'Password must be at least 6 characters.',
+    'auth/too-many-requests':    'Too many attempts. Please try again later.',
+    'auth/invalid-credential':   'Incorrect email or password.',
+  };
+  return map[code] || 'Something went wrong. Please try again.';
 }
 
 function signOut() {
-  auth.signOut().then(() => showScreen('screen-auth'));
+  auth.signOut().then(() => { showScreen('screen-auth'); showForm('login'); });
 }
 
 // ═══════════════════════════════════════════════════
