@@ -772,12 +772,23 @@ let currentCashCurrency = 'PKR';
 let cashPin = null;
 
 async function loadCash() {
-  const snap = await settingsRef().get();
-  if (snap.exists) {
-    const d = snap.data();
-    currentCash         = d.cash         || 0;
-    currentCashCurrency = d.cashCurrency || 'PKR';
-    cashPin             = d.pin          || null;
+  // PIN is localStorage-only (works without Firestore rules update)
+  cashPin = localStorage.getItem('acct_pin') || null;
+  // Cash from Firestore with localStorage fallback
+  try {
+    const snap = await settingsRef().get();
+    if (snap.exists) {
+      const d = snap.data();
+      currentCash         = d.cash         || 0;
+      currentCashCurrency = d.cashCurrency || 'PKR';
+      localStorage.setItem('acct_cash', JSON.stringify({ cash: currentCash, cur: currentCashCurrency }));
+    } else {
+      const saved = JSON.parse(localStorage.getItem('acct_cash') || 'null');
+      if (saved) { currentCash = saved.cash || 0; currentCashCurrency = saved.cur || 'PKR'; }
+    }
+  } catch {
+    const saved = JSON.parse(localStorage.getItem('acct_cash') || 'null');
+    if (saved) { currentCash = saved.cash || 0; currentCashCurrency = saved.cur || 'PKR'; }
   }
   renderStats();
 }
@@ -820,13 +831,13 @@ function openCashModal() {
   setTimeout(() => document.getElementById('pin-d1').focus(), 100);
 }
 
-async function setNewPin() {
+function setNewPin() {
   const pin = getPinValue();
   if (pin.length !== 4) {
     const el = document.getElementById('pin-error');
     el.textContent = 'Please enter all 4 digits.'; el.style.display = 'block'; return;
   }
-  await settingsRef().set({ pin }, { merge: true });
+  localStorage.setItem('acct_pin', pin);
   cashPin = pin;
   closePinModal();
   showCashEdit();
@@ -857,9 +868,10 @@ async function saveCash() {
   const amount   = parseFloat(document.getElementById('cash-amount').value);
   const currency = document.getElementById('cash-currency').value;
   if (isNaN(amount) || amount < 0) { showToast('Enter a valid amount.','error'); return; }
-  await settingsRef().set({ cash: amount, cashCurrency: currency }, { merge: true });
   currentCash         = amount;
   currentCashCurrency = currency;
+  localStorage.setItem('acct_cash', JSON.stringify({ cash: amount, cur: currency }));
+  try { await settingsRef().set({ cash: amount, cashCurrency: currency }, { merge: true }); } catch {}
   closeCashModal();
   renderStats();
   showToast('Cash balance updated.','success');
@@ -924,24 +936,42 @@ function renderPayments() {
       rows = rows.filter(p => p.computedStatus === currentFilter);
   }
 
-  rows = [...rows].sort((a,b) => {
+  // Always split pending vs paid so paid never disappears
+  const pending = [...rows.filter(p => p.computedStatus !== 'Paid')].sort((a,b) => {
     if (!a.dueDate) return 1; if (!b.dueDate) return -1;
     return new Date(a.dueDate) - new Date(b.dueDate);
   });
+  const paid = [...rows.filter(p => p.computedStatus === 'Paid')].sort((a,b) => {
+    return (b.paidDate || b.dueDate || '') > (a.paidDate || a.dueDate || '') ? 1 : -1;
+  });
+  rows = [...pending, ...paid];
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty">No payments found.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = rows.map(p => {
+  let html = '';
+  let paidDividerAdded = false;
+
+  rows.forEach(p => {
+    // Insert a divider row before the first paid entry
+    if (p.computedStatus === 'Paid' && !paidDividerAdded && pending.length > 0) {
+      paidDividerAdded = true;
+      html += `<tr><td colspan="7" style="background:var(--card2);padding:8px 16px;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border)">
+        ✓ Paid — added to / deducted from current cash
+      </td></tr>`;
+    }
+
     const isPKR   = !p.currency || p.currency === 'PKR';
     const pkrAmt  = isPKR ? p.amount : toPKR(p.amount, p.currency);
     const rateTag = p.status === 'Paid' && !isPKR && p.paidRate
       ? `<div style="font-size:.74rem;color:var(--muted);margin-top:3px">@ ${p.paidRate} PKR/${p.currency} · ${fmtPKR(p.paidPKR)}</div>`
       : (!isPKR ? `<div style="font-size:.74rem;color:var(--muted);margin-top:3px">≈ ${fmtPKR(pkrAmt)}</div>` : '');
-    return `
-    <tr>
+
+    const rowStyle = p.computedStatus === 'Paid' ? 'opacity:.7' : '';
+    html += `
+    <tr style="${rowStyle}">
       <td><strong>${esc(p.description)}</strong></td>
       <td>${esc(p.party || '—')}</td>
       <td><span class="badge badge-${p.type}">${p.type}</span></td>
@@ -949,7 +979,7 @@ function renderPayments() {
         ${p.type === 'Incoming' ? '+' : '−'}${fmt(p.amount, p.currency || 'PKR')}
         ${rateTag}
       </td>
-      <td>${p.dueDate || '—'}</td>
+      <td>${p.paidDate || p.dueDate || '—'}</td>
       <td><span class="badge badge-${p.computedStatus}">${p.computedStatus}</span></td>
       <td>
         <div class="row-actions">
@@ -961,7 +991,9 @@ function renderPayments() {
         </div>
       </td>
     </tr>`;
-  }).join('');
+  });
+
+  tbody.innerHTML = html;
 }
 
 function sumInPKR(list) {
@@ -1213,10 +1245,11 @@ async function confirmMarkPaid() {
     // Auto-adjust current cash in PKR
     const cashPKR    = toPKR(currentCash, currentCashCurrency);
     const newCashPKR = p.type === 'Incoming' ? cashPKR + paidPKR : cashPKR - paidPKR;
-    // Store back as PKR
-    await settingsRef().set({ cash: Math.max(0, newCashPKR), cashCurrency: 'PKR' }, { merge: true });
     currentCash         = Math.max(0, newCashPKR);
     currentCashCurrency = 'PKR';
+    localStorage.setItem('acct_cash', JSON.stringify({ cash: currentCash, cur: 'PKR' }));
+    try { await settingsRef().set({ cash: currentCash, cashCurrency: 'PKR' }, { merge: true }); } catch {}
+    renderStats();
 
     showToast(
       p.type === 'Incoming'
