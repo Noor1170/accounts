@@ -5,169 +5,222 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Accounts — Payment Tracker</title>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Google API client -->
-  <script src="https://apis.google.com/js/api.js"></script>
+  <!-- Firebase v10 (modular via compat CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
   <!-- Flatpickr date picker -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
   <style>
     :root {
-      --green:  #22c55e;
-      --red:    #ef4444;
-      --amber:  #f59e0b;
-      --blue:   #3b82f6;
-      --bg:     #0f172a;
-      --card:   #1e293b;
-      --border: #334155;
-      --text:   #f1f5f9;
-      --muted:  #94a3b8;
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --amber:   #f59e0b;
+      --blue:    #3b82f6;
+      --indigo:  #6366f1;
+      --bg:      #0a0f1e;
+      --card:    #111827;
+      --card2:   #1a2236;
+      --border:  #1f2f47;
+      --text:    #f0f4ff;
+      --muted:   #6b7fa8;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *  { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    /* ── AUTH SCREEN ── */
-    #auth-screen {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      min-height: 100vh; gap: 24px; text-align: center; padding: 24px;
+    /* ── SETUP / AUTH SCREENS ── */
+    .screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 28px; padding: 24px; text-align: center; }
+    .screen.active { display: flex; }
+
+    .logo { font-size: 3.2rem; }
+    .screen h1 { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; }
+    .screen p  { color: var(--muted); max-width: 440px; line-height: 1.7; font-size: .95rem; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; width: 100%; max-width: 520px; text-align: left;
     }
-    #auth-screen h1 { font-size: 2rem; font-weight: 700; }
-    #auth-screen p  { color: var(--muted); max-width: 420px; line-height: 1.6; }
+    .card h3 { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+    .card input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 11px 14px; color: var(--text); font-size: .95rem; margin-bottom: 10px; transition: border-color .2s;
+    }
+    .card input:focus { outline: none; border-color: var(--blue); }
+    .card small { color: var(--muted); font-size: .82rem; line-height: 1.6; display: block; margin-top: 6px; }
+    .card code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: .82rem; }
+    .card ol { padding-left: 18px; margin-top: 10px; }
+    .card ol li { color: var(--muted); font-size: .85rem; line-height: 2; }
+    .card ol li strong { color: var(--text); }
+
     .btn-google {
-      display: inline-flex; align-items: center; gap: 10px;
-      background: #fff; color: #1a1a1a; border: none; border-radius: 8px;
-      padding: 12px 24px; font-size: 1rem; font-weight: 600; cursor: pointer;
-      transition: opacity .15s;
+      display: inline-flex; align-items: center; gap: 12px;
+      background: #fff; color: #1a1a1a; border: none; border-radius: 10px;
+      padding: 13px 28px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: opacity .15s;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
     }
-    .btn-google:hover { opacity: .9; }
-    .btn-google img { width: 20px; height: 20px; }
-    .config-box {
-      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-      padding: 20px; width: 100%; max-width: 500px; text-align: left;
+    .btn-google:hover { opacity: .92; }
+    .btn-google img { width: 22px; }
+
+    .btn-save {
+      background: var(--blue); color: #fff; border: none; border-radius: 10px;
+      padding: 11px 24px; font-size: .95rem; font-weight: 600; cursor: pointer; transition: opacity .15s; width: 100%; margin-top: 4px;
     }
-    .config-box h3 { margin-bottom: 12px; font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-    .config-box input {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px 12px; color: var(--text); font-size: .95rem; margin-bottom: 8px;
-    }
-    .config-box input:focus { outline: none; border-color: var(--blue); }
-    .config-box small { color: var(--muted); font-size: .82rem; line-height: 1.5; display: block; margin-top: 4px; }
+    .btn-save:hover { opacity: .87; }
 
     /* ── APP SHELL ── */
     #app { display: none; flex-direction: column; min-height: 100vh; }
+
     header {
       background: var(--card); border-bottom: 1px solid var(--border);
-      padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
-      height: 60px; position: sticky; top: 0; z-index: 100;
+      padding: 0 28px; display: flex; align-items: center; justify-content: space-between;
+      height: 64px; position: sticky; top: 0; z-index: 200;
+      backdrop-filter: blur(12px);
     }
-    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
-    .header-right { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border); }
-    .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: .9rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
-    .btn:hover { opacity: .85; }
-    .btn-primary { background: var(--blue); color: #fff; }
-    .btn-sm { padding: 5px 12px; font-size: .82rem; }
-    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    .btn-danger { background: var(--red); color: #fff; }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-left span { font-size: 1.3rem; }
+    .header-left h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); }
+    .user-name { font-size: .85rem; color: var(--muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    main { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; }
+    /* buttons */
+    .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: .88rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .84; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-sm { padding: 5px 12px; font-size: .8rem; }
+    .btn-success { background: var(--green); color: #fff; }
+    .btn-danger  { background: var(--red);   color: #fff; }
+
+    main { padding: 28px; max-width: 1280px; margin: 0 auto; width: 100%; flex: 1; }
 
     /* ── STAT CARDS ── */
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+    @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 500px) { .stats { grid-template-columns: 1fr; } }
+
     .stat-card {
-      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px;
+      position: relative; overflow: hidden;
     }
-    .stat-card .label { font-size: .82rem; color: var(--muted); margin-bottom: 6px; }
-    .stat-card .value { font-size: 1.7rem; font-weight: 700; }
-    .stat-card.incoming .value { color: var(--green); }
-    .stat-card.outgoing .value { color: var(--red); }
-    .stat-card.net     .value { color: var(--blue); }
-    .stat-card.overdue .value { color: var(--amber); }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .stat-card.incoming::before { background: var(--green); }
+    .stat-card.outgoing::before { background: var(--red); }
+    .stat-card.net::before     { background: var(--blue); }
+    .stat-card.overdue::before { background: var(--amber); }
+    .stat-card .s-label { font-size: .78rem; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em; }
+    .stat-card .s-value { font-size: 1.75rem; font-weight: 800; line-height: 1; }
+    .stat-card .s-sub   { font-size: .78rem; color: var(--muted); margin-top: 6px; }
+    .stat-card.incoming .s-value { color: var(--green); }
+    .stat-card.outgoing .s-value { color: var(--red); }
+    .stat-card.net      .s-value { color: var(--blue); }
+    .stat-card.overdue  .s-value { color: var(--amber); }
 
     /* ── ALERTS ── */
-    #alert-bar { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
+    #alert-bar { margin-bottom: 22px; display: flex; flex-direction: column; gap: 8px; }
     .alert {
-      background: #451a03; border: 1px solid var(--amber); border-radius: 8px;
-      padding: 10px 16px; font-size: .88rem; display: flex; align-items: center; gap: 10px;
+      border-radius: 10px; padding: 11px 16px; font-size: .875rem;
+      display: flex; align-items: center; gap: 10px; border: 1px solid;
     }
-    .alert.overdue-alert { background: #450a0a; border-color: var(--red); }
+    .alert.overdue  { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.35); }
+    .alert.upcoming { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.35); }
+
+    /* ── SECTION HEADER ── */
+    .section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section-hdr h2 { font-size: 1rem; font-weight: 700; }
+
+    /* ── FILTERS ── */
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .f-btn {
+      background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 15px; font-size: .8rem; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .f-btn:hover, .f-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
     /* ── TABLE ── */
-    .section-header {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+    .table-wrap { border-radius: 14px; border: 1px solid var(--border); overflow: hidden; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
+    thead th {
+      background: var(--card2); padding: 12px 16px; text-align: left;
+      font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em;
+      border-bottom: 1px solid var(--border);
     }
-    .section-header h2 { font-size: 1rem; font-weight: 600; }
-    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .filter-btn {
-      background: var(--card); border: 1px solid var(--border); border-radius: 20px;
-      padding: 5px 14px; font-size: .82rem; color: var(--muted); cursor: pointer; transition: all .15s;
-    }
-    .filter-btn.active, .filter-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+    tbody td { padding: 13px 16px; font-size: .9rem; border-bottom: 1px solid var(--border); vertical-align: middle; background: var(--card); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--card2); }
 
-    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
-    table { width: 100%; border-collapse: collapse; }
-    th { background: var(--card); text-align: left; padding: 11px 14px; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
-    td { padding: 12px 14px; font-size: .9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255,255,255,.03); }
+    .badge { display: inline-block; padding: 3px 11px; border-radius: 20px; font-size: .74rem; font-weight: 700; }
+    .badge-Incoming { background: rgba(34,197,94,.15);  color: var(--green); }
+    .badge-Outgoing { background: rgba(239,68,68,.15);  color: var(--red); }
+    .badge-Paid     { background: rgba(34,197,94,.15);  color: var(--green); }
+    .badge-Pending  { background: rgba(59,130,246,.15); color: var(--blue); }
+    .badge-Overdue  { background: rgba(239,68,68,.18);  color: var(--red); }
+    .badge-Upcoming { background: rgba(245,158,11,.15); color: var(--amber); }
 
-    .badge {
-      display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600;
-    }
-    .badge-incoming { background: rgba(34,197,94,.15); color: var(--green); }
-    .badge-outgoing { background: rgba(239,68,68,.15); color: var(--red); }
-    .badge-paid     { background: rgba(34,197,94,.15); color: var(--green); }
-    .badge-pending  { background: rgba(59,130,246,.15); color: var(--blue); }
-    .badge-overdue  { background: rgba(239,68,68,.2);  color: var(--red); }
-    .badge-upcoming { background: rgba(245,158,11,.15); color: var(--amber); }
-
-    .amount-in  { color: var(--green); font-weight: 600; }
-    .amount-out { color: var(--red);   font-weight: 600; }
-
+    .amt-in  { color: var(--green); font-weight: 700; }
+    .amt-out { color: var(--red);   font-weight: 700; }
     .row-actions { display: flex; gap: 6px; }
+    .empty, .spinner { text-align: center; padding: 48px; color: var(--muted); font-size: .9rem; }
 
     /* ── CHART ── */
     .chart-card {
-      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-      padding: 20px; margin-top: 24px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px; margin-top: 28px;
     }
-    .chart-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
-    .chart-controls { display: flex; gap: 8px; margin-bottom: 16px; }
-    #forecastChart { max-height: 300px; }
+    .chart-card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+    .chart-controls { display: flex; gap: 8px; margin-bottom: 18px; }
+    #forecastChart { max-height: 320px; }
 
     /* ── MODAL ── */
     .overlay {
-      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
-      align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      align-items: center; justify-content: center; z-index: 500; padding: 16px;
+      backdrop-filter: blur(4px);
     }
     .overlay.open { display: flex; }
     .modal {
-      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-      padding: 28px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      padding: 30px; width: 100%; max-width: 500px; max-height: 92vh; overflow-y: auto;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
     }
-    .modal h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+    .modal h2 { font-size: 1.1rem; font-weight: 800; margin-bottom: 22px; }
     .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-size: .83rem; color: var(--muted); margin-bottom: 6px; }
+    .form-group label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 7px; letter-spacing: .04em; }
     .form-group input, .form-group select, .form-group textarea {
-      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px 12px; color: var(--text); font-size: .95rem; font-family: inherit;
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 11px 14px; color: var(--text); font-size: .93rem; font-family: inherit; transition: border-color .2s;
     }
-    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--blue); }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--blue); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 
-    /* ── MISC ── */
-    .empty { text-align: center; padding: 40px; color: var(--muted); }
-    .spinner { text-align: center; padding: 40px; color: var(--muted); font-size: .9rem; }
+    /* ── DELETE CONFIRM ── */
+    .confirm-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+      align-items: center; justify-content: center; z-index: 600; padding: 16px;
+    }
+    .confirm-overlay.open { display: flex; }
+    .confirm-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px; max-width: 380px; width: 100%; text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+    }
+    .confirm-box h3 { font-size: 1.05rem; margin-bottom: 10px; }
+    .confirm-box p  { color: var(--muted); font-size: .88rem; margin-bottom: 22px; }
+    .confirm-box .actions { display: flex; gap: 10px; justify-content: center; }
+
+    /* ── TOAST ── */
     #toast {
-      position: fixed; bottom: 24px; right: 24px; background: var(--card);
-      border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px;
+      position: fixed; bottom: 28px; right: 28px; background: var(--card2);
+      border: 1px solid var(--border); border-radius: 12px; padding: 13px 22px;
       font-size: .9rem; z-index: 9999; opacity: 0; transition: opacity .3s;
-      pointer-events: none;
+      pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,.4);
     }
     #toast.show { opacity: 1; }
     #toast.success { border-color: var(--green); }
@@ -176,51 +229,79 @@
     @media (max-width: 600px) {
       main { padding: 16px; }
       .form-row { grid-template-columns: 1fr; }
-      .stats { grid-template-columns: 1fr 1fr; }
+      header { padding: 0 16px; }
     }
   </style>
 </head>
 <body>
 
-<!-- ══════════════ AUTH SCREEN ══════════════ -->
-<div id="auth-screen">
-  <div style="font-size:3rem">💼</div>
+<!-- ══════════════════════════════════════
+     SETUP SCREEN (first-time config)
+══════════════════════════════════════ -->
+<div id="screen-setup" class="screen active">
+  <div class="logo">💼</div>
   <h1>Accounts Tracker</h1>
-  <p>Track incoming &amp; outgoing payments, get overdue alerts, and forecast your cash flow — all stored in your Google Sheet.</p>
+  <p>Professional payment tracking — incoming, outgoing, forecasts, and overdue alerts. Powered by Firebase.</p>
 
-  <div class="config-box">
-    <h3>Configuration</h3>
-    <input id="cfg-client-id" placeholder="Google OAuth Client ID  (*.apps.googleusercontent.com)" />
-    <input id="cfg-sheet-id"  placeholder="Google Sheet ID  (from the sheet URL)" />
-    <small>
-      Need help? See the <strong>Setup Guide</strong> below. Your credentials are saved only in your browser.
-    </small>
+  <div class="card">
+    <h3>Firebase Configuration</h3>
+    <input id="cfg-apiKey"            placeholder="apiKey" />
+    <input id="cfg-authDomain"        placeholder="authDomain  (e.g. your-app.firebaseapp.com)" />
+    <input id="cfg-projectId"         placeholder="projectId" />
+    <input id="cfg-storageBucket"     placeholder="storageBucket" />
+    <input id="cfg-messagingSenderId" placeholder="messagingSenderId" />
+    <input id="cfg-appId"             placeholder="appId" />
+    <button class="btn-save" onclick="saveConfig()">Save &amp; Continue →</button>
   </div>
 
-  <button class="btn-google" onclick="startAuth()">
-    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
-    Sign in with Google
-  </button>
-
-  <div class="config-box" style="margin-top:8px">
-    <h3>📋 Setup Guide (one-time)</h3>
-    <small>
-      1. Go to <strong>console.cloud.google.com</strong> → New Project.<br/>
-      2. Enable <strong>Google Sheets API</strong>.<br/>
-      3. Create <strong>OAuth 2.0 credentials</strong> → Web app → add <code>http://localhost</code> and the URL you use to open this file as authorized JS origins. Paste the <strong>Client ID</strong> above.<br/>
-      4. Create a new <strong>Google Sheet</strong>. Copy its ID from the URL (the long string between /d/ and /edit). Paste the <strong>Sheet ID</strong> above.<br/>
-      5. Click <em>Sign in with Google</em> — the app will create the required columns automatically.
-    </small>
+  <div class="card">
+    <h3>📋 One-time Setup Guide</h3>
+    <ol>
+      <li>Go to <strong>console.firebase.google.com</strong> → <strong>Add project</strong></li>
+      <li>In the project, click <strong>Web</strong> (</>) → register app → copy the <code>firebaseConfig</code> values above</li>
+      <li>Go to <strong>Build → Authentication</strong> → Sign-in method → enable <strong>Google</strong></li>
+      <li>Go to <strong>Build → Firestore Database</strong> → Create database → Start in <strong>production mode</strong></li>
+      <li>In Firestore → <strong>Rules</strong>, paste:
+        <pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;font-size:.78rem;overflow-x:auto;color:var(--text)">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/payments/{paymentId} {
+      allow read, write: if request.auth != null &amp;&amp; request.auth.uid == userId;
+    }
+  }
+}</pre>
+      </li>
+      <li>Go to <strong>Authentication → Settings → Authorized domains</strong> → add <strong>noor1170.github.io</strong></li>
+      <li>Come back here, fill in the config, click Save &amp; Continue</li>
+    </ol>
   </div>
 </div>
 
-<!-- ══════════════ APP ══════════════ -->
+<!-- ══════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════ -->
+<div id="screen-auth" class="screen">
+  <div class="logo">🔐</div>
+  <h1>Sign in to continue</h1>
+  <p>Your data is stored securely in the cloud, tied to your Google account. Nobody else can see it.</p>
+  <button class="btn-google" onclick="signInWithGoogle()">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+    Continue with Google
+  </button>
+</div>
+
+<!-- ══════════════════════════════════════
+     APP
+══════════════════════════════════════ -->
 <div id="app">
   <header>
-    <h1>💼 Accounts Tracker</h1>
+    <div class="header-left">
+      <span>💼</span>
+      <h1>Accounts Tracker</h1>
+    </div>
     <div class="header-right">
       <img id="user-avatar" class="avatar" src="" alt="" style="display:none" />
-      <span id="user-name" style="font-size:.88rem;color:var(--muted)"></span>
+      <span class="user-name" id="user-name"></span>
       <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>
     </div>
   </header>
@@ -229,20 +310,24 @@
     <!-- STAT CARDS -->
     <div class="stats">
       <div class="stat-card incoming">
-        <div class="label">Total Incoming (pending)</div>
-        <div class="value" id="stat-in">—</div>
+        <div class="s-label">Incoming (pending)</div>
+        <div class="s-value" id="stat-in">—</div>
+        <div class="s-sub"  id="stat-in-count">—</div>
       </div>
       <div class="stat-card outgoing">
-        <div class="label">Total Outgoing (pending)</div>
-        <div class="value" id="stat-out">—</div>
+        <div class="s-label">Outgoing (pending)</div>
+        <div class="s-value" id="stat-out">—</div>
+        <div class="s-sub"  id="stat-out-count">—</div>
       </div>
       <div class="stat-card net">
-        <div class="label">Net Cash Flow</div>
-        <div class="value" id="stat-net">—</div>
+        <div class="s-label">Net Cash Flow</div>
+        <div class="s-value" id="stat-net">—</div>
+        <div class="s-sub">Incoming − Outgoing</div>
       </div>
       <div class="stat-card overdue">
-        <div class="label">Overdue Payments</div>
-        <div class="value" id="stat-overdue">—</div>
+        <div class="s-label">Overdue</div>
+        <div class="s-value" id="stat-overdue">—</div>
+        <div class="s-sub"  id="stat-overdue-amt">—</div>
       </div>
     </div>
 
@@ -250,19 +335,19 @@
     <div id="alert-bar"></div>
 
     <!-- PAYMENT LIST -->
-    <div class="section-header">
+    <div class="section-hdr">
       <h2>Payments</h2>
       <button class="btn btn-primary btn-sm" onclick="openModal()">+ Add Payment</button>
     </div>
 
     <div class="filters">
-      <button class="filter-btn active" data-filter="all"      onclick="setFilter('all',this)">All</button>
-      <button class="filter-btn"        data-filter="incoming" onclick="setFilter('incoming',this)">Incoming</button>
-      <button class="filter-btn"        data-filter="outgoing" onclick="setFilter('outgoing',this)">Outgoing</button>
-      <button class="filter-btn"        data-filter="overdue"  onclick="setFilter('overdue',this)">Overdue</button>
-      <button class="filter-btn"        data-filter="upcoming" onclick="setFilter('upcoming',this)">Due Soon</button>
-      <button class="filter-btn"        data-filter="pending"  onclick="setFilter('pending',this)">Pending</button>
-      <button class="filter-btn"        data-filter="paid"     onclick="setFilter('paid',this)">Paid</button>
+      <button class="f-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="f-btn"        onclick="setFilter('Incoming',this)">Incoming</button>
+      <button class="f-btn"        onclick="setFilter('Outgoing',this)">Outgoing</button>
+      <button class="f-btn"        onclick="setFilter('Overdue',this)">Overdue</button>
+      <button class="f-btn"        onclick="setFilter('Upcoming',this)">Due Soon</button>
+      <button class="f-btn"        onclick="setFilter('Pending',this)">Pending</button>
+      <button class="f-btn"        onclick="setFilter('Paid',this)">Paid</button>
     </div>
 
     <div class="table-wrap">
@@ -288,31 +373,33 @@
     <div class="chart-card">
       <h2>Cash Flow Forecast</h2>
       <div class="chart-controls">
-        <button class="filter-btn active" onclick="setChartRange(3,this)">3 Months</button>
-        <button class="filter-btn"        onclick="setChartRange(6,this)">6 Months</button>
-        <button class="filter-btn"        onclick="setChartRange(12,this)">12 Months</button>
+        <button class="f-btn active" onclick="setChartRange(3,this)">3 Months</button>
+        <button class="f-btn"        onclick="setChartRange(6,this)">6 Months</button>
+        <button class="f-btn"        onclick="setChartRange(12,this)">12 Months</button>
       </div>
       <canvas id="forecastChart"></canvas>
     </div>
   </main>
 </div>
 
-<!-- ══════════════ MODAL ══════════════ -->
-<div class="overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+<!-- ══════════════════════════════════════
+     ADD / EDIT MODAL
+══════════════════════════════════════ -->
+<div class="overlay" id="modal-overlay" onclick="overlayClick(event,'modal-overlay')">
   <div class="modal">
     <h2 id="modal-title">Add Payment</h2>
-    <input type="hidden" id="edit-row-index" />
+    <input type="hidden" id="edit-id" />
 
     <div class="form-row">
       <div class="form-group">
-        <label>Type</label>
+        <label>TYPE</label>
         <select id="f-type">
           <option value="Incoming">Incoming</option>
           <option value="Outgoing">Outgoing</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Status</label>
+        <label>STATUS</label>
         <select id="f-status">
           <option value="Pending">Pending</option>
           <option value="Paid">Paid</option>
@@ -321,22 +408,22 @@
     </div>
 
     <div class="form-group">
-      <label>Description</label>
-      <input id="f-desc" placeholder="e.g. Invoice #1042, Rent, Supplier payment…" />
+      <label>DESCRIPTION</label>
+      <input id="f-desc" placeholder="e.g. Invoice #1042, Monthly rent, Supplier payment…" />
     </div>
 
     <div class="form-group">
-      <label>Party (client / vendor name)</label>
+      <label>PARTY (client / vendor name)</label>
       <input id="f-party" placeholder="e.g. Acme Corp" />
     </div>
 
     <div class="form-row">
       <div class="form-group">
-        <label>Amount</label>
+        <label>AMOUNT</label>
         <input id="f-amount" type="number" placeholder="0.00" min="0" step="0.01" />
       </div>
       <div class="form-group">
-        <label>Currency</label>
+        <label>CURRENCY</label>
         <select id="f-currency">
           <option>USD</option><option>EUR</option><option>GBP</option>
           <option>AED</option><option>SAR</option><option>PKR</option>
@@ -346,13 +433,13 @@
     </div>
 
     <div class="form-group">
-      <label>Due Date</label>
-      <input id="f-due" placeholder="YYYY-MM-DD" />
+      <label>DUE DATE</label>
+      <input id="f-due" placeholder="Pick a date" readonly />
     </div>
 
     <div class="form-group">
-      <label>Notes (optional)</label>
-      <textarea id="f-notes" rows="2" placeholder="Any additional details…"></textarea>
+      <label>NOTES (optional)</label>
+      <textarea id="f-notes" rows="2" placeholder="Reference number, bank details, reminders…"></textarea>
     </div>
 
     <div class="modal-actions">
@@ -362,157 +449,138 @@
   </div>
 </div>
 
+<!-- DELETE CONFIRM -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3>Delete Payment?</h3>
+    <p>This action cannot be undone.</p>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
-// ════════════════════════════════════════════
-//  CONFIG + STATE
-// ════════════════════════════════════════════
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
-const SHEET_NAME = 'Payments';
-const COLS = ['ID','Type','Description','Party','Amount','Currency','DueDate','Status','Notes'];
-// Row index in sheet (1-based header, data from row 2)
+// ═══════════════════════════════════════════════════
+//  CONFIG PERSISTENCE
+// ═══════════════════════════════════════════════════
+const CFG_KEY = 'acct_firebase_cfg_v2';
 
-let CLIENT_ID = '';
-let SHEET_ID  = '';
-let tokenClient;
-let accessToken = null;
-let allPayments  = [];
-let chartRange   = 3;
-let currentFilter = 'all';
-let forecastChart = null;
-
-// ════════════════════════════════════════════
-//  INIT / AUTH
-// ════════════════════════════════════════════
-window.onload = () => {
-  CLIENT_ID = localStorage.getItem('acct_client_id') || '';
-  SHEET_ID  = localStorage.getItem('acct_sheet_id')  || '';
-  document.getElementById('cfg-client-id').value = CLIENT_ID;
-  document.getElementById('cfg-sheet-id').value  = SHEET_ID;
-
-  // Restore saved token
-  const saved = sessionStorage.getItem('acct_token');
-  if (saved) {
-    accessToken = saved;
-    showApp();
-    loadPayments();
+function saveConfig() {
+  const cfg = {
+    apiKey:            document.getElementById('cfg-apiKey').value.trim(),
+    authDomain:        document.getElementById('cfg-authDomain').value.trim(),
+    projectId:         document.getElementById('cfg-projectId').value.trim(),
+    storageBucket:     document.getElementById('cfg-storageBucket').value.trim(),
+    messagingSenderId: document.getElementById('cfg-messagingSenderId').value.trim(),
+    appId:             document.getElementById('cfg-appId').value.trim(),
+  };
+  if (!cfg.apiKey || !cfg.projectId) {
+    showToast('apiKey and projectId are required.', 'error'); return;
   }
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  initFirebase(cfg);
+}
 
-  // Flatpickr
-  flatpickr('#f-due', { dateFormat: 'Y-m-d', allowInput: true });
-};
+function loadStoredConfig() {
+  const raw = localStorage.getItem(CFG_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
 
-function startAuth() {
-  CLIENT_ID = document.getElementById('cfg-client-id').value.trim();
-  SHEET_ID  = document.getElementById('cfg-sheet-id').value.trim();
-  if (!CLIENT_ID || !SHEET_ID) {
-    showToast('Please enter both Client ID and Sheet ID.', 'error');
-    return;
-  }
-  localStorage.setItem('acct_client_id', CLIENT_ID);
-  localStorage.setItem('acct_sheet_id',  SHEET_ID);
+// ═══════════════════════════════════════════════════
+//  FIREBASE INIT
+// ═══════════════════════════════════════════════════
+let db, auth;
 
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: async (resp) => {
-      if (resp.error) { showToast('Auth error: ' + resp.error, 'error'); return; }
-      accessToken = resp.access_token;
-      sessionStorage.setItem('acct_token', accessToken);
-      await fetchUserInfo();
-      showApp();
-      await ensureSheetHeaders();
-      loadPayments();
+function initFirebase(cfg) {
+  if (firebase.apps.length) firebase.app().delete();
+  firebase.initializeApp(cfg);
+  db   = firebase.firestore();
+  auth = firebase.auth();
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      showApp(user);
+      subscribePayments();
+    } else {
+      showScreen('screen-auth');
     }
   });
-  tokenClient.requestAccessToken();
 }
 
-async function fetchUserInfo() {
-  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (!r.ok) return;
-  const info = await r.json();
-  document.getElementById('user-name').textContent = info.name || info.email || '';
-  const av = document.getElementById('user-avatar');
-  if (info.picture) { av.src = info.picture; av.style.display = 'block'; }
+// ═══════════════════════════════════════════════════
+//  SCREENS
+// ═══════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+  document.getElementById('app').style.display = 'none';
 }
 
-function showApp() {
-  document.getElementById('auth-screen').style.display = 'none';
+function showApp(user) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('app').style.display = 'flex';
+  document.getElementById('user-name').textContent = user.displayName || user.email || '';
+  const av = document.getElementById('user-avatar');
+  if (user.photoURL) { av.src = user.photoURL; av.style.display = 'block'; }
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════
+let currentUser = null;
+
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(e => showToast(e.message, 'error'));
 }
 
 function signOut() {
-  accessToken = null;
-  sessionStorage.removeItem('acct_token');
-  location.reload();
+  auth.signOut().then(() => showScreen('screen-auth'));
 }
 
-// ════════════════════════════════════════════
-//  SHEETS API HELPERS
-// ════════════════════════════════════════════
-async function sheetsGet(range) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (r.status === 401) { signOut(); return null; }
-  return r.json();
+// ═══════════════════════════════════════════════════
+//  FIRESTORE HELPERS
+// ═══════════════════════════════════════════════════
+function paymentsRef() {
+  return db.collection('users').doc(currentUser.uid).collection('payments');
 }
 
-async function sheetsAppend(values) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-  return fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values })
-  });
-}
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let allPayments   = [];
+let currentFilter = 'all';
+let chartRange    = 3;
+let forecastChart = null;
+let deleteTarget  = null;
+let unsubscribe   = null;
 
-async function sheetsUpdate(range, values) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
-  return fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values })
-  });
-}
-
-async function ensureSheetHeaders() {
-  const data = await sheetsGet(`${SHEET_NAME}!A1:Z1`);
-  if (!data || !data.values || !data.values[0] || data.values[0][0] !== 'ID') {
-    await sheetsUpdate(`${SHEET_NAME}!A1`, [COLS]);
-  }
-}
-
-// ════════════════════════════════════════════
-//  LOAD & RENDER PAYMENTS
-// ════════════════════════════════════════════
-async function loadPayments() {
-  const data = await sheetsGet(`${SHEET_NAME}!A2:I1000`);
-  allPayments = [];
-  if (data && data.values) {
-    allPayments = data.values
-      .filter(r => r[0]) // skip empty rows
-      .map((r, i) => ({
-        rowIndex: i + 2, // 1-based sheet row
-        id:          r[0] || '',
-        type:        r[1] || '',
-        description: r[2] || '',
-        party:       r[3] || '',
-        amount:      parseFloat(r[4]) || 0,
-        currency:    r[5] || 'USD',
-        dueDate:     r[6] || '',
-        status:      computeStatus(r[7], r[6]),
-        rawStatus:   r[7] || 'Pending',
-        notes:       r[8] || ''
+// ═══════════════════════════════════════════════════
+//  REAL-TIME SUBSCRIPTION
+// ═══════════════════════════════════════════════════
+function subscribePayments() {
+  if (unsubscribe) unsubscribe();
+  unsubscribe = paymentsRef()
+    .orderBy('dueDate', 'asc')
+    .onSnapshot(snap => {
+      allPayments = snap.docs.map(d => ({ id: d.id, ...d.data() })).map(p => ({
+        ...p,
+        computedStatus: computeStatus(p.status, p.dueDate)
       }));
-  }
-  renderPayments();
-  renderStats();
-  renderAlerts();
-  renderChart();
+      renderPayments();
+      renderStats();
+      renderAlerts();
+      renderChart();
+    }, err => {
+      showToast('Firestore error: ' + err.message, 'error');
+    });
 }
 
 function computeStatus(rawStatus, dueDate) {
@@ -520,48 +588,54 @@ function computeStatus(rawStatus, dueDate) {
   if (!dueDate) return 'Pending';
   const today = new Date(); today.setHours(0,0,0,0);
   const due   = new Date(dueDate);
+  if (isNaN(due)) return 'Pending';
   if (due < today) return 'Overdue';
   const diff = (due - today) / 86400000;
   if (diff <= 7) return 'Upcoming';
   return 'Pending';
 }
 
+// ═══════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════
 function renderPayments() {
   const tbody = document.getElementById('payments-tbody');
   let rows = allPayments;
 
   if (currentFilter !== 'all') {
-    if (currentFilter === 'incoming') rows = rows.filter(p => p.type === 'Incoming');
-    else if (currentFilter === 'outgoing') rows = rows.filter(p => p.type === 'Outgoing');
-    else rows = rows.filter(p => p.status.toLowerCase() === currentFilter);
+    if (currentFilter === 'Incoming' || currentFilter === 'Outgoing')
+      rows = rows.filter(p => p.type === currentFilter);
+    else
+      rows = rows.filter(p => p.computedStatus === currentFilter);
   }
+
+  rows = [...rows].sort((a,b) => {
+    if (!a.dueDate) return 1; if (!b.dueDate) return -1;
+    return new Date(a.dueDate) - new Date(b.dueDate);
+  });
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty">No payments found.</td></tr>`;
     return;
   }
 
-  rows.sort((a,b) => {
-    if (!a.dueDate) return 1; if (!b.dueDate) return -1;
-    return new Date(a.dueDate) - new Date(b.dueDate);
-  });
-
   tbody.innerHTML = rows.map(p => `
     <tr>
-      <td>${esc(p.description)}</td>
-      <td>${esc(p.party)}</td>
-      <td><span class="badge badge-${p.type.toLowerCase()}">${p.type}</span></td>
-      <td class="${p.type === 'Incoming' ? 'amount-in' : 'amount-out'}">
-        ${p.type === 'Incoming' ? '+' : '-'}${fmt(p.amount, p.currency)}
+      <td><strong>${esc(p.description)}</strong></td>
+      <td>${esc(p.party || '—')}</td>
+      <td><span class="badge badge-${p.type}">${p.type}</span></td>
+      <td class="${p.type === 'Incoming' ? 'amt-in' : 'amt-out'}">
+        ${p.type === 'Incoming' ? '+' : '−'}${fmt(p.amount, p.currency)}
       </td>
       <td>${p.dueDate || '—'}</td>
-      <td><span class="badge badge-${p.status.toLowerCase()}">${p.status}</span></td>
+      <td><span class="badge badge-${p.computedStatus}">${p.computedStatus}</span></td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-ghost btn-sm" onclick="editPayment(${p.rowIndex})">Edit</button>
-          ${p.rawStatus !== 'Paid'
-            ? `<button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="markPaid(${p.rowIndex})">Mark Paid</button>`
+          <button class="btn btn-ghost btn-sm" onclick="editPayment('${p.id}')">Edit</button>
+          ${p.status !== 'Paid'
+            ? `<button class="btn btn-success btn-sm" onclick="markPaid('${p.id}')">Paid ✓</button>`
             : ''}
+          <button class="btn btn-danger btn-sm" onclick="askDelete('${p.id}')">✕</button>
         </div>
       </td>
     </tr>
@@ -569,87 +643,71 @@ function renderPayments() {
 }
 
 function renderStats() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const pending = allPayments.filter(p => p.rawStatus !== 'Paid');
-  const totalIn  = pending.filter(p => p.type === 'Incoming').reduce((s,p) => s + p.amount, 0);
-  const totalOut = pending.filter(p => p.type === 'Outgoing').reduce((s,p) => s + p.amount, 0);
+  const pending = allPayments.filter(p => p.status !== 'Paid');
+  const inList  = pending.filter(p => p.type === 'Incoming');
+  const outList = pending.filter(p => p.type === 'Outgoing');
+  const totalIn  = inList.reduce((s,p) => s + (p.amount||0), 0);
+  const totalOut = outList.reduce((s,p) => s + (p.amount||0), 0);
   const net      = totalIn - totalOut;
-  const overdue  = allPayments.filter(p => p.status === 'Overdue').length;
+  const overList = allPayments.filter(p => p.computedStatus === 'Overdue');
+  const overAmt  = overList.reduce((s,p) => s + (p.amount||0), 0);
 
-  document.getElementById('stat-in').textContent      = fmtNum(totalIn);
-  document.getElementById('stat-out').textContent     = fmtNum(totalOut);
-  document.getElementById('stat-net').textContent     = (net >= 0 ? '+' : '') + fmtNum(net);
-  document.getElementById('stat-net').style.color     = net >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('stat-overdue').textContent = overdue;
+  document.getElementById('stat-in').textContent        = fmtShort(totalIn);
+  document.getElementById('stat-in-count').textContent  = `${inList.length} payment${inList.length!==1?'s':''}`;
+  document.getElementById('stat-out').textContent       = fmtShort(totalOut);
+  document.getElementById('stat-out-count').textContent = `${outList.length} payment${outList.length!==1?'s':''}`;
+  document.getElementById('stat-net').textContent       = (net>=0?'+':'')+fmtShort(net);
+  document.getElementById('stat-net').style.color       = net>=0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('stat-overdue').textContent   = overList.length;
+  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmtShort(overAmt) + ' at risk' : 'All clear';
 }
 
 function renderAlerts() {
   const bar = document.getElementById('alert-bar');
   bar.innerHTML = '';
-  const overdue  = allPayments.filter(p => p.status === 'Overdue');
-  const upcoming = allPayments.filter(p => p.status === 'Upcoming');
-
-  overdue.forEach(p => {
-    const div = document.createElement('div');
-    div.className = 'alert overdue-alert';
-    div.innerHTML = `🔴 <strong>Overdue:</strong> ${esc(p.description)} (${p.party}) — ${fmt(p.amount, p.currency)} was due on ${p.dueDate}`;
-    bar.appendChild(div);
+  allPayments.filter(p => p.computedStatus === 'Overdue').forEach(p => {
+    bar.insertAdjacentHTML('beforeend',
+      `<div class="alert overdue">🔴 <strong>Overdue:</strong> ${esc(p.description)}${p.party?' · '+esc(p.party):''} — ${fmt(p.amount,p.currency)} was due <strong>${p.dueDate}</strong></div>`);
   });
-  upcoming.forEach(p => {
-    const div = document.createElement('div');
-    div.className = 'alert';
-    div.innerHTML = `⚠️ <strong>Due soon:</strong> ${esc(p.description)} (${p.party}) — ${fmt(p.amount, p.currency)} due on ${p.dueDate}`;
-    bar.appendChild(div);
+  allPayments.filter(p => p.computedStatus === 'Upcoming').forEach(p => {
+    bar.insertAdjacentHTML('beforeend',
+      `<div class="alert upcoming">⚠️ <strong>Due soon:</strong> ${esc(p.description)}${p.party?' · '+esc(p.party):''} — ${fmt(p.amount,p.currency)} due <strong>${p.dueDate}</strong></div>`);
   });
 }
 
-// ════════════════════════════════════════════
-//  FORECAST CHART
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  CHART
+// ═══════════════════════════════════════════════════
 function renderChart() {
-  const months = [];
-  const inArr  = [];
-  const outArr = [];
-  const netArr = [];
-  const today  = new Date();
+  const labels=[], inArr=[], outArr=[], netArr=[];
+  const today = new Date();
 
-  for (let i = 0; i < chartRange; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-    const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
-    months.push(label);
-
-    const mo = d.getMonth(), yr = d.getFullYear();
-    const inMonth = allPayments
-      .filter(p => p.rawStatus !== 'Paid' && p.type === 'Incoming' && p.dueDate)
-      .filter(p => { const dd = new Date(p.dueDate); return dd.getMonth() === mo && dd.getFullYear() === yr; })
-      .reduce((s,p) => s + p.amount, 0);
-    const outMonth = allPayments
-      .filter(p => p.rawStatus !== 'Paid' && p.type === 'Outgoing' && p.dueDate)
-      .filter(p => { const dd = new Date(p.dueDate); return dd.getMonth() === mo && dd.getFullYear() === yr; })
-      .reduce((s,p) => s + p.amount, 0);
-
-    inArr.push(inMonth);
-    outArr.push(outMonth);
-    netArr.push(inMonth - outMonth);
+  for (let i=0; i<chartRange; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth()+i, 1);
+    labels.push(d.toLocaleString('default',{month:'short',year:'2-digit'}));
+    const mo=d.getMonth(), yr=d.getFullYear();
+    const match = p => p.status!=='Paid' && p.dueDate && new Date(p.dueDate).getMonth()===mo && new Date(p.dueDate).getFullYear()===yr;
+    const inM  = allPayments.filter(p=>p.type==='Incoming'&&match(p)).reduce((s,p)=>s+(p.amount||0),0);
+    const outM = allPayments.filter(p=>p.type==='Outgoing'&&match(p)).reduce((s,p)=>s+(p.amount||0),0);
+    inArr.push(inM); outArr.push(outM); netArr.push(inM-outM);
   }
 
   if (forecastChart) forecastChart.destroy();
   forecastChart = new Chart(document.getElementById('forecastChart'), {
-    type: 'bar',
     data: {
-      labels: months,
+      labels,
       datasets: [
-        { label: 'Incoming', data: inArr,  backgroundColor: 'rgba(34,197,94,.6)',  borderColor: '#22c55e', borderWidth: 1 },
-        { label: 'Outgoing', data: outArr, backgroundColor: 'rgba(239,68,68,.6)',  borderColor: '#ef4444', borderWidth: 1 },
-        { label: 'Net',      data: netArr, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.1)', tension: .4, fill: true, pointBackgroundColor: '#3b82f6' }
+        { type:'bar',  label:'Incoming', data:inArr,  backgroundColor:'rgba(34,197,94,.55)',  borderColor:'#22c55e', borderWidth:1 },
+        { type:'bar',  label:'Outgoing', data:outArr, backgroundColor:'rgba(239,68,68,.55)',  borderColor:'#ef4444', borderWidth:1 },
+        { type:'line', label:'Net',      data:netArr, borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.08)', tension:.4, fill:true, pointBackgroundColor:'#3b82f6', pointRadius:4 }
       ]
     },
     options: {
-      responsive: true,
-      plugins: { legend: { labels: { color: '#94a3b8' } } },
-      scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
-        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+      responsive:true,
+      plugins:{ legend:{ labels:{ color:'#6b7fa8', font:{size:12} } } },
+      scales:{
+        x:{ ticks:{color:'#6b7fa8'}, grid:{color:'#1a2236'} },
+        y:{ ticks:{color:'#6b7fa8'}, grid:{color:'#1f2f47'} }
       }
     }
   });
@@ -657,108 +715,156 @@ function renderChart() {
 
 function setChartRange(n, el) {
   chartRange = n;
-  document.querySelectorAll('.chart-controls .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.chart-controls .f-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   renderChart();
 }
 
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  FILTER
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function setFilter(f, el) {
   currentFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filters .f-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   renderPayments();
 }
 
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 //  MODAL
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+let datePicker;
+
 function openModal(payment) {
   document.getElementById('modal-title').textContent = payment ? 'Edit Payment' : 'Add Payment';
-  document.getElementById('edit-row-index').value = payment ? payment.rowIndex : '';
-  document.getElementById('f-type').value     = payment ? payment.type     : 'Incoming';
-  document.getElementById('f-status').value   = payment ? payment.rawStatus: 'Pending';
-  document.getElementById('f-desc').value     = payment ? payment.description: '';
-  document.getElementById('f-party').value    = payment ? payment.party    : '';
-  document.getElementById('f-amount').value   = payment ? payment.amount   : '';
-  document.getElementById('f-currency').value = payment ? payment.currency : 'USD';
-  document.getElementById('f-due').value      = payment ? payment.dueDate  : '';
-  document.getElementById('f-notes').value    = payment ? payment.notes    : '';
+  document.getElementById('edit-id').value       = payment ? payment.id : '';
+  document.getElementById('f-type').value        = payment ? payment.type      : 'Incoming';
+  document.getElementById('f-status').value      = payment ? payment.status    : 'Pending';
+  document.getElementById('f-desc').value        = payment ? payment.description: '';
+  document.getElementById('f-party').value       = payment ? (payment.party||'') : '';
+  document.getElementById('f-amount').value      = payment ? payment.amount    : '';
+  document.getElementById('f-currency').value    = payment ? payment.currency  : 'USD';
+  document.getElementById('f-due').value         = payment ? (payment.dueDate||'') : '';
+  document.getElementById('f-notes').value       = payment ? (payment.notes||'') : '';
+
+  if (!datePicker) {
+    datePicker = flatpickr('#f-due', { dateFormat:'Y-m-d', allowInput:true });
+  }
+  if (payment && payment.dueDate) datePicker.setDate(payment.dueDate);
+  else datePicker.clear();
+
   document.getElementById('modal-overlay').classList.add('open');
 }
 
-function closeModal()  { document.getElementById('modal-overlay').classList.remove('open'); }
-function closeModalOutside(e) { if (e.target.id === 'modal-overlay') closeModal(); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
-function editPayment(rowIndex) {
-  const p = allPayments.find(x => x.rowIndex === rowIndex);
+function overlayClick(e, id) { if (e.target.id===id) document.getElementById(id).classList.remove('open'); }
+
+function editPayment(id) {
+  const p = allPayments.find(x=>x.id===id);
   if (p) openModal(p);
 }
 
 async function savePayment() {
   const desc   = document.getElementById('f-desc').value.trim();
   const amount = parseFloat(document.getElementById('f-amount').value);
-  const due    = document.getElementById('f-due').value.trim();
+  if (!desc)              { showToast('Description is required.','error'); return; }
+  if (isNaN(amount)||amount<=0) { showToast('Enter a valid amount.','error'); return; }
 
-  if (!desc) { showToast('Description is required.', 'error'); return; }
-  if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
-
-  const row = [
-    document.getElementById('edit-row-index').value || Date.now().toString(),
-    document.getElementById('f-type').value,
-    desc,
-    document.getElementById('f-party').value.trim(),
+  const data = {
+    type:        document.getElementById('f-type').value,
+    status:      document.getElementById('f-status').value,
+    description: desc,
+    party:       document.getElementById('f-party').value.trim(),
     amount,
-    document.getElementById('f-currency').value,
-    due,
-    document.getElementById('f-status').value,
-    document.getElementById('f-notes').value.trim()
-  ];
+    currency:    document.getElementById('f-currency').value,
+    dueDate:     document.getElementById('f-due').value || '',
+    notes:       document.getElementById('f-notes').value.trim(),
+    updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+  };
 
-  const rowIdx = document.getElementById('edit-row-index').value;
-  if (rowIdx) {
-    await sheetsUpdate(`${SHEET_NAME}!A${rowIdx}:I${rowIdx}`, [row]);
-    showToast('Payment updated.', 'success');
-  } else {
-    await sheetsAppend([row]);
-    showToast('Payment added.', 'success');
-  }
-  closeModal();
-  await loadPayments();
+  const editId = document.getElementById('edit-id').value;
+  try {
+    if (editId) {
+      await paymentsRef().doc(editId).update(data);
+      showToast('Payment updated.','success');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await paymentsRef().add(data);
+      showToast('Payment added.','success');
+    }
+    closeModal();
+  } catch(e) { showToast('Error: '+e.message,'error'); }
 }
 
-async function markPaid(rowIndex) {
-  const p = allPayments.find(x => x.rowIndex === rowIndex);
-  if (!p) return;
-  const row = [p.id, p.type, p.description, p.party, p.amount, p.currency, p.dueDate, 'Paid', p.notes];
-  await sheetsUpdate(`${SHEET_NAME}!A${rowIndex}:I${rowIndex}`, [row]);
-  showToast('Marked as paid!', 'success');
-  await loadPayments();
+async function markPaid(id) {
+  await paymentsRef().doc(id).update({ status:'Paid', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  showToast('Marked as paid ✓','success');
 }
 
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+//  DELETE
+// ═══════════════════════════════════════════════════
+function askDelete(id) {
+  deleteTarget = id;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function closeConfirm() {
+  deleteTarget = null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+async function confirmDelete() {
+  if (!deleteTarget) return;
+  try {
+    await paymentsRef().doc(deleteTarget).delete();
+    showToast('Payment deleted.','success');
+  } catch(e) { showToast('Error: '+e.message,'error'); }
+  closeConfirm();
+}
+
+// ═══════════════════════════════════════════════════
 //  UTILITIES
-// ════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 function fmt(n, currency='USD') {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n);
+  try {
+    return new Intl.NumberFormat('en-US',{style:'currency',currency,maximumFractionDigits:2}).format(n||0);
+  } catch { return `${currency} ${(n||0).toFixed(2)}`; }
 }
-function fmtNum(n) {
-  return new Intl.NumberFormat('en-US', { style: 'decimal', maximumFractionDigits: 2 }).format(Math.abs(n));
+function fmtShort(n) {
+  const abs = Math.abs(n);
+  if (abs>=1e9) return (n/1e9).toFixed(1)+'B';
+  if (abs>=1e6) return (n/1e6).toFixed(1)+'M';
+  if (abs>=1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
 }
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 let toastTimer;
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className   = `show ${type}`;
+  t.textContent = msg; t.className = `show ${type}`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = '', 3000);
+  toastTimer = setTimeout(()=>t.className='', 3500);
 }
+
+// ═══════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════
+window.onload = () => {
+  const cfg = loadStoredConfig();
+  if (cfg) {
+    // Pre-fill inputs
+    Object.keys(cfg).forEach(k => {
+      const el = document.getElementById('cfg-'+k);
+      if (el) el.value = cfg[k];
+    });
+    initFirebase(cfg);
+  } else {
+    showScreen('screen-setup');
+  }
+};
 </script>
 </body>
 </html>
