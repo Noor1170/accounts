@@ -142,6 +142,8 @@
     .stat-card.incoming::before  { background: var(--green); }
     .stat-card.outgoing::before  { background: var(--red); }
     .stat-card.net::before       { background: var(--blue); }
+    .stat-card.days7::before     { background: #f97316; }
+    .stat-card.days15::before    { background: #ec4899; }
     .stat-card.overdue::before   { background: var(--amber); }
     .stat-card .s-label { font-size: .78rem; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em; }
     .stat-card .s-value { font-size: 1.75rem; font-weight: 800; line-height: 1; }
@@ -151,6 +153,8 @@
     .stat-card.incoming  .s-value { color: var(--green); }
     .stat-card.outgoing  .s-value { color: var(--red); }
     .stat-card.net       .s-value { color: var(--blue); }
+    .stat-card.days7     .s-value { color: #f97316; }
+    .stat-card.days15    .s-value { color: #ec4899; }
     .stat-card.overdue   .s-value { color: var(--amber); }
 
     /* ── ALERTS ── */
@@ -373,6 +377,16 @@
         <div class="s-label">Net Cash Flow</div>
         <div class="s-value" id="stat-net">—</div>
         <div class="s-sub">Incoming − Outgoing</div>
+      </div>
+      <div class="stat-card days7">
+        <div class="s-label">Balance in 7 Days</div>
+        <div class="s-value" id="stat-7d">—</div>
+        <div class="s-sub" id="stat-7d-sub">Pending due within 7 days</div>
+      </div>
+      <div class="stat-card days15">
+        <div class="s-label">Balance in 15 Days</div>
+        <div class="s-value" id="stat-15d">—</div>
+        <div class="s-sub" id="stat-15d-sub">Pending due within 15 days</div>
       </div>
       <div class="stat-card overdue">
         <div class="s-label">Overdue</div>
@@ -663,7 +677,7 @@ function settingsRef() {
 //  CURRENT CASH
 // ═══════════════════════════════════════════════════
 let currentCash = 0;
-let currentCashCurrency = 'USD';
+let currentCashCurrency = 'PKR';
 
 async function loadCash() {
   const snap = await settingsRef().get();
@@ -785,6 +799,15 @@ function renderPayments() {
   `).join('');
 }
 
+function balanceInDays(days) {
+  const cutoff = new Date();
+  cutoff.setHours(23, 59, 59, 999);
+  cutoff.setDate(cutoff.getDate() + days);
+  const inAmt  = allPayments.filter(p => p.status !== 'Paid' && p.type === 'Incoming' && p.dueDate && new Date(p.dueDate) <= cutoff).reduce((s,p) => s+(p.amount||0), 0);
+  const outAmt = allPayments.filter(p => p.status !== 'Paid' && p.type === 'Outgoing' && p.dueDate && new Date(p.dueDate) <= cutoff).reduce((s,p) => s+(p.amount||0), 0);
+  return currentCash + inAmt - outAmt;
+}
+
 function renderStats() {
   const pending  = allPayments.filter(p => p.status !== 'Paid');
   const inList   = pending.filter(p => p.type === 'Incoming');
@@ -795,19 +818,28 @@ function renderStats() {
   const projected = currentCash + totalIn - totalOut;
   const overList = allPayments.filter(p => p.computedStatus === 'Overdue');
   const overAmt  = overList.reduce((s,p) => s + (p.amount||0), 0);
+  const bal7  = balanceInDays(7);
+  const bal15 = balanceInDays(15);
+  const cur   = currentCashCurrency;
 
-  document.getElementById('stat-cash').textContent      = fmt(currentCash, currentCashCurrency);
-  document.getElementById('stat-in').textContent        = fmtShort(totalIn);
-  document.getElementById('stat-in-count').textContent  = `${inList.length} payment${inList.length!==1?'s':''}`;
-  document.getElementById('stat-out').textContent       = fmtShort(totalOut);
-  document.getElementById('stat-out-count').textContent = `${outList.length} payment${outList.length!==1?'s':''}`;
+  document.getElementById('stat-cash').textContent       = fmt(currentCash, cur);
+  document.getElementById('stat-in').textContent         = fmt(totalIn, cur);
+  document.getElementById('stat-in-count').textContent   = `${inList.length} payment${inList.length!==1?'s':''}`;
+  document.getElementById('stat-out').textContent        = fmt(totalOut, cur);
+  document.getElementById('stat-out-count').textContent  = `${outList.length} payment${outList.length!==1?'s':''}`;
   const projEl = document.getElementById('stat-projected');
-  projEl.textContent   = fmt(projected, currentCashCurrency);
-  projEl.style.color   = projected >= 0 ? '#06b6d4' : 'var(--red)';
-  document.getElementById('stat-net').textContent       = (net>=0?'+':'')+fmtShort(net);
-  document.getElementById('stat-net').style.color       = net>=0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('stat-overdue').textContent   = overList.length;
-  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmtShort(overAmt)+' at risk' : 'All clear';
+  projEl.textContent = fmt(projected, cur);
+  projEl.style.color = projected >= 0 ? '#06b6d4' : 'var(--red)';
+  document.getElementById('stat-net').textContent        = (net>=0?'+':'')+fmt(net, cur);
+  document.getElementById('stat-net').style.color        = net>=0 ? 'var(--green)' : 'var(--red)';
+  const el7 = document.getElementById('stat-7d');
+  el7.textContent  = fmt(bal7, cur);
+  el7.style.color  = bal7 >= 0 ? '#f97316' : 'var(--red)';
+  const el15 = document.getElementById('stat-15d');
+  el15.textContent = fmt(bal15, cur);
+  el15.style.color = bal15 >= 0 ? '#ec4899' : 'var(--red)';
+  document.getElementById('stat-overdue').textContent    = overList.length;
+  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmt(overAmt, cur)+' at risk' : 'All clear';
 }
 
 function renderAlerts() {
