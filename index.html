@@ -513,6 +513,34 @@
   </div>
 </div>
 
+<!-- MARK AS PAID MODAL -->
+<div class="overlay" id="markpaid-overlay" onclick="overlayClick(event,'markpaid-overlay')">
+  <div class="modal" style="max-width:400px">
+    <h2>Mark as Paid</h2>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:18px">
+      <strong id="mp-desc"></strong> · <span id="mp-amount"></span>
+    </p>
+
+    <div id="markpaid-rate-row">
+      <div class="form-group">
+        <label>EXCHANGE RATE <span style="font-weight:400;color:var(--muted)" id="mp-rate-date"></span></label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:var(--muted);font-size:.9rem">1 <span id="mp-currency"></span> =</span>
+          <input id="mp-rate" type="number" min="0" step="0.0001" placeholder="PKR rate"
+            style="flex:1" oninput="updateMpPKR(parseFloat(document.getElementById('mp-amount').textContent.replace(/[^0-9.]/g,'')), document.getElementById('mp-currency').textContent)" />
+          <span style="color:var(--muted);font-size:.9rem">PKR</span>
+        </div>
+        <div id="mp-pkr-equiv" style="margin-top:8px;font-size:.88rem;color:var(--green);font-weight:600"></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeMpModal()">Cancel</button>
+      <button class="btn btn-success" onclick="confirmMarkPaid()">Confirm Paid ✓</button>
+    </div>
+  </div>
+</div>
+
 <!-- CASH MODAL -->
 <div class="overlay" id="cash-overlay" onclick="overlayClick(event,'cash-overlay')">
   <div class="modal" style="max-width:360px">
@@ -664,6 +692,41 @@ function signOut() {
 }
 
 // ═══════════════════════════════════════════════════
+//  LIVE EXCHANGE RATES  (1 PKR = x of each currency)
+// ═══════════════════════════════════════════════════
+let liveRates    = {};   // e.g. { usd: 0.00358, eur: 0.00330, ... }
+let ratesDate    = '';
+let ratesFetched = false;
+
+async function fetchExchangeRates() {
+  try {
+    const res  = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/pkr.min.json');
+    const data = await res.json();
+    liveRates  = data.pkr;   // 1 PKR = liveRates[currency]
+    ratesDate  = data.date;
+    ratesFetched = true;
+  } catch(e) {
+    console.warn('Could not fetch exchange rates', e);
+  }
+}
+
+function toPKR(amount, currency) {
+  if (!currency || currency === 'PKR') return amount;
+  const key  = currency.toLowerCase();
+  const rate = liveRates[key];
+  if (!rate || rate === 0) return amount; // fallback: show as-is
+  return amount / rate; // 1 PKR = rate[currency], so amount[currency] / rate = PKR
+}
+
+function liveRateForCurrency(currency) {
+  if (!currency || currency === 'PKR') return null;
+  const key  = currency.toLowerCase();
+  const rate = liveRates[key];
+  if (!rate || rate === 0) return null;
+  return +(1 / rate).toFixed(4); // how many PKR per 1 unit of currency
+}
+
+// ═══════════════════════════════════════════════════
 //  FIRESTORE HELPERS
 // ═══════════════════════════════════════════════════
 function paymentsRef() {
@@ -722,6 +785,7 @@ let unsubscribe   = null;
 //  REAL-TIME SUBSCRIPTION
 // ═══════════════════════════════════════════════════
 function subscribePayments() {
+  fetchExchangeRates().then(() => renderStats());
   loadCash();
   if (unsubscribe) unsubscribe();
   unsubscribe = paymentsRef()
@@ -776,13 +840,20 @@ function renderPayments() {
     return;
   }
 
-  tbody.innerHTML = rows.map(p => `
+  tbody.innerHTML = rows.map(p => {
+    const isPKR   = !p.currency || p.currency === 'PKR';
+    const pkrAmt  = isPKR ? p.amount : toPKR(p.amount, p.currency);
+    const rateTag = p.status === 'Paid' && !isPKR && p.paidRate
+      ? `<div style="font-size:.74rem;color:var(--muted);margin-top:3px">@ ${p.paidRate} PKR/${p.currency} · ${fmtPKR(p.paidPKR)}</div>`
+      : (!isPKR ? `<div style="font-size:.74rem;color:var(--muted);margin-top:3px">≈ ${fmtPKR(pkrAmt)}</div>` : '');
+    return `
     <tr>
       <td><strong>${esc(p.description)}</strong></td>
       <td>${esc(p.party || '—')}</td>
       <td><span class="badge badge-${p.type}">${p.type}</span></td>
       <td class="${p.type === 'Incoming' ? 'amt-in' : 'amt-out'}">
-        ${p.type === 'Incoming' ? '+' : '−'}${fmt(p.amount, p.currency)}
+        ${p.type === 'Incoming' ? '+' : '−'}${fmt(p.amount, p.currency || 'PKR')}
+        ${rateTag}
       </td>
       <td>${p.dueDate || '—'}</td>
       <td><span class="badge badge-${p.computedStatus}">${p.computedStatus}</span></td>
@@ -795,51 +866,57 @@ function renderPayments() {
           <button class="btn btn-danger btn-sm" onclick="askDelete('${p.id}')">✕</button>
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
+}
+
+function sumInPKR(list) {
+  return list.reduce((s, p) => s + toPKR(p.amount || 0, p.currency || 'PKR'), 0);
 }
 
 function balanceInDays(days) {
   const cutoff = new Date();
   cutoff.setHours(23, 59, 59, 999);
   cutoff.setDate(cutoff.getDate() + days);
-  const inAmt  = allPayments.filter(p => p.status !== 'Paid' && p.type === 'Incoming' && p.dueDate && new Date(p.dueDate) <= cutoff).reduce((s,p) => s+(p.amount||0), 0);
-  const outAmt = allPayments.filter(p => p.status !== 'Paid' && p.type === 'Outgoing' && p.dueDate && new Date(p.dueDate) <= cutoff).reduce((s,p) => s+(p.amount||0), 0);
-  return currentCash + inAmt - outAmt;
+  const match  = p => p.status !== 'Paid' && p.dueDate && new Date(p.dueDate) <= cutoff;
+  const inAmt  = sumInPKR(allPayments.filter(p => p.type === 'Incoming' && match(p)));
+  const outAmt = sumInPKR(allPayments.filter(p => p.type === 'Outgoing' && match(p)));
+  return toPKR(currentCash, currentCashCurrency) + inAmt - outAmt;
 }
 
 function renderStats() {
   const pending  = allPayments.filter(p => p.status !== 'Paid');
   const inList   = pending.filter(p => p.type === 'Incoming');
   const outList  = pending.filter(p => p.type === 'Outgoing');
-  const totalIn  = inList.reduce((s,p)  => s + (p.amount||0), 0);
-  const totalOut = outList.reduce((s,p) => s + (p.amount||0), 0);
+  const totalIn  = sumInPKR(inList);
+  const totalOut = sumInPKR(outList);
+  const cashPKR  = toPKR(currentCash, currentCashCurrency);
   const net      = totalIn - totalOut;
-  const projected = currentCash + totalIn - totalOut;
+  const projected = cashPKR + totalIn - totalOut;
   const overList = allPayments.filter(p => p.computedStatus === 'Overdue');
-  const overAmt  = overList.reduce((s,p) => s + (p.amount||0), 0);
-  const bal7  = balanceInDays(7);
-  const bal15 = balanceInDays(15);
-  const cur   = currentCashCurrency;
+  const overAmt  = sumInPKR(overList);
+  const bal7     = balanceInDays(7);
+  const bal15    = balanceInDays(15);
+  const rateNote = ratesDate ? ` · rate ${ratesDate}` : '';
 
-  document.getElementById('stat-cash').textContent       = fmt(currentCash, cur);
-  document.getElementById('stat-in').textContent         = fmt(totalIn, cur);
-  document.getElementById('stat-in-count').textContent   = `${inList.length} payment${inList.length!==1?'s':''}`;
-  document.getElementById('stat-out').textContent        = fmt(totalOut, cur);
+  document.getElementById('stat-cash').textContent       = fmtPKR(cashPKR);
+  document.getElementById('stat-in').textContent         = fmtPKR(totalIn);
+  document.getElementById('stat-in-count').textContent   = `${inList.length} payment${inList.length!==1?'s':''}${rateNote}`;
+  document.getElementById('stat-out').textContent        = fmtPKR(totalOut);
   document.getElementById('stat-out-count').textContent  = `${outList.length} payment${outList.length!==1?'s':''}`;
   const projEl = document.getElementById('stat-projected');
-  projEl.textContent = fmt(projected, cur);
+  projEl.textContent = fmtPKR(projected);
   projEl.style.color = projected >= 0 ? '#06b6d4' : 'var(--red)';
-  document.getElementById('stat-net').textContent        = (net>=0?'+':'')+fmt(net, cur);
+  document.getElementById('stat-net').textContent        = (net>=0?'+':'')+fmtPKR(net);
   document.getElementById('stat-net').style.color        = net>=0 ? 'var(--green)' : 'var(--red)';
   const el7 = document.getElementById('stat-7d');
-  el7.textContent  = fmt(bal7, cur);
+  el7.textContent  = fmtPKR(bal7);
   el7.style.color  = bal7 >= 0 ? '#f97316' : 'var(--red)';
   const el15 = document.getElementById('stat-15d');
-  el15.textContent = fmt(bal15, cur);
+  el15.textContent = fmtPKR(bal15);
   el15.style.color = bal15 >= 0 ? '#ec4899' : 'var(--red)';
-  document.getElementById('stat-overdue').textContent    = overList.length;
-  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmt(overAmt, cur)+' at risk' : 'All clear';
+  document.getElementById('stat-overdue').textContent     = overList.length;
+  document.getElementById('stat-overdue-amt').textContent = overList.length ? fmtPKR(overAmt)+' at risk' : 'All clear';
 }
 
 function renderAlerts() {
@@ -977,9 +1054,67 @@ async function savePayment() {
   } catch(e) { showToast('Error: '+e.message,'error'); }
 }
 
-async function markPaid(id) {
-  await paymentsRef().doc(id).update({ status:'Paid', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-  showToast('Marked as paid ✓','success');
+// ── MARK PAID MODAL ──
+let markPaidTarget = null;
+
+function markPaid(id) {
+  const p = allPayments.find(x => x.id === id);
+  if (!p) return;
+  markPaidTarget = id;
+
+  const isPKR = !p.currency || p.currency === 'PKR';
+  const modal  = document.getElementById('markpaid-overlay');
+  const rateRow = document.getElementById('markpaid-rate-row');
+  const liveRate = liveRateForCurrency(p.currency);
+
+  document.getElementById('mp-desc').textContent     = p.description;
+  document.getElementById('mp-amount').textContent   = fmt(p.amount, p.currency || 'PKR');
+  document.getElementById('mp-currency').textContent = p.currency || 'PKR';
+
+  if (isPKR) {
+    rateRow.style.display = 'none';
+  } else {
+    rateRow.style.display = '';
+    document.getElementById('mp-rate').value       = liveRate || '';
+    document.getElementById('mp-rate-date').textContent = ratesDate ? `Live rate · ${ratesDate}` : 'Enter manually';
+    updateMpPKR(p.amount, p.currency);
+  }
+  modal.classList.add('open');
+}
+
+function updateMpPKR(amount, currency) {
+  const rate = parseFloat(document.getElementById('mp-rate').value);
+  const pkr  = !isNaN(rate) && rate > 0 ? amount * rate : null;
+  document.getElementById('mp-pkr-equiv').textContent = pkr != null ? '= ' + fmtPKR(pkr) : '';
+}
+
+function closeMpModal() {
+  document.getElementById('markpaid-overlay').classList.remove('open');
+  markPaidTarget = null;
+}
+
+async function confirmMarkPaid() {
+  if (!markPaidTarget) return;
+  const p    = allPayments.find(x => x.id === markPaidTarget);
+  const isPKR = !p.currency || p.currency === 'PKR';
+  const rate  = isPKR ? 1 : parseFloat(document.getElementById('mp-rate').value);
+
+  if (!isPKR && (isNaN(rate) || rate <= 0)) {
+    showToast('Please enter a valid exchange rate.', 'error'); return;
+  }
+
+  const update = {
+    status:    'Paid',
+    paidDate:  new Date().toISOString().slice(0,10),
+    paidRate:  isPKR ? 1 : rate,
+    paidPKR:   isPKR ? p.amount : p.amount * rate,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try {
+    await paymentsRef().doc(markPaidTarget).update(update);
+    showToast('Marked as paid ✓', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  closeMpModal();
 }
 
 // ═══════════════════════════════════════════════════
@@ -1005,10 +1140,13 @@ async function confirmDelete() {
 // ═══════════════════════════════════════════════════
 //  UTILITIES
 // ═══════════════════════════════════════════════════
-function fmt(n, currency='USD') {
+function fmt(n, currency='PKR') {
   try {
     return new Intl.NumberFormat('en-US',{style:'currency',currency,maximumFractionDigits:2}).format(n||0);
   } catch { return `${currency} ${(n||0).toFixed(2)}`; }
+}
+function fmtPKR(n) {
+  return 'PKR ' + new Intl.NumberFormat('en-PK',{maximumFractionDigits:0}).format(Math.round(n||0));
 }
 function fmtShort(n) {
   const abs = Math.abs(n);
