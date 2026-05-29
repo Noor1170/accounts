@@ -5,10 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Accounts — Payment Tracker</title>
 
-  <!-- Firebase v10 (modular via compat CDN) -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey:            "AIzaSyD8F_LkyCoArajxinu9NuzLX8L0FLMgkiM",
+      authDomain:        "accounts-93678.firebaseapp.com",
+      projectId:         "accounts-93678",
+      storageBucket:     "accounts-93678.firebasestorage.app",
+      messagingSenderId: "344901993818",
+      appId:             "1:344901993818:web:eac125fa19651e76c3df63"
+    });
+  </script>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -253,51 +263,9 @@
 <body>
 
 <!-- ══════════════════════════════════════
-     SETUP SCREEN (first-time config)
-══════════════════════════════════════ -->
-<div id="screen-setup" class="screen active">
-  <div class="logo">💼</div>
-  <h1>Accounts Tracker</h1>
-  <p>Professional payment tracking — incoming, outgoing, forecasts, and overdue alerts. Powered by Firebase.</p>
-
-  <div class="card">
-    <h3>Firebase Configuration</h3>
-    <input id="cfg-apiKey"            placeholder="apiKey" />
-    <input id="cfg-authDomain"        placeholder="authDomain  (e.g. your-app.firebaseapp.com)" />
-    <input id="cfg-projectId"         placeholder="projectId" />
-    <input id="cfg-storageBucket"     placeholder="storageBucket" />
-    <input id="cfg-messagingSenderId" placeholder="messagingSenderId" />
-    <input id="cfg-appId"             placeholder="appId" />
-    <button class="btn-save" onclick="saveConfig()">Save &amp; Continue →</button>
-  </div>
-
-  <div class="card">
-    <h3>📋 One-time Setup Guide</h3>
-    <ol>
-      <li>Go to <strong>console.firebase.google.com</strong> → <strong>Add project</strong></li>
-      <li>In the project, click <strong>Web</strong> (</>) → register app → copy the <code>firebaseConfig</code> values above</li>
-      <li>Go to <strong>Build → Authentication</strong> → Sign-in method → enable <strong>Email/Password</strong></li>
-      <li>Go to <strong>Build → Firestore Database</strong> → Create database → Start in <strong>production mode</strong></li>
-      <li>In Firestore → <strong>Rules</strong>, paste:
-        <pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;font-size:.78rem;overflow-x:auto;color:var(--text)">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId}/payments/{paymentId} {
-      allow read, write: if request.auth != null &amp;&amp; request.auth.uid == userId;
-    }
-  }
-}</pre>
-      </li>
-      <li>Go to <strong>Authentication → Settings → Authorized domains</strong> → add <strong>noor1170.github.io</strong></li>
-      <li>Come back here, fill in the config, click Save &amp; Continue</li>
-    </ol>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════
      AUTH SCREEN
 ══════════════════════════════════════ -->
-<div id="screen-auth" class="screen">
+<div id="screen-auth" class="screen active">
   <!-- LOGIN FORM -->
   <div id="form-login" class="auth-card">
     <div style="font-size:2rem;margin-bottom:12px">💼</div>
@@ -533,53 +501,20 @@ service cloud.firestore {
 
 <script>
 // ═══════════════════════════════════════════════════
-//  CONFIG PERSISTENCE
+//  FIREBASE (already initialised in <head>)
 // ═══════════════════════════════════════════════════
-const CFG_KEY = 'acct_firebase_cfg_v2';
+const db   = firebase.firestore();
+const auth = firebase.auth();
 
-function saveConfig() {
-  const cfg = {
-    apiKey:            document.getElementById('cfg-apiKey').value.trim(),
-    authDomain:        document.getElementById('cfg-authDomain').value.trim(),
-    projectId:         document.getElementById('cfg-projectId').value.trim(),
-    storageBucket:     document.getElementById('cfg-storageBucket').value.trim(),
-    messagingSenderId: document.getElementById('cfg-messagingSenderId').value.trim(),
-    appId:             document.getElementById('cfg-appId').value.trim(),
-  };
-  if (!cfg.apiKey || !cfg.projectId) {
-    showToast('apiKey and projectId are required.', 'error'); return;
+auth.onAuthStateChanged(user => {
+  if (user) {
+    currentUser = user;
+    showApp(user);
+    subscribePayments();
+  } else {
+    showScreen('screen-auth');
   }
-  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
-  initFirebase(cfg);
-}
-
-function loadStoredConfig() {
-  const raw = localStorage.getItem(CFG_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
-}
-
-// ═══════════════════════════════════════════════════
-//  FIREBASE INIT
-// ═══════════════════════════════════════════════════
-let db, auth;
-
-function initFirebase(cfg) {
-  if (firebase.apps.length) firebase.app().delete();
-  firebase.initializeApp(cfg);
-  db   = firebase.firestore();
-  auth = firebase.auth();
-
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      showApp(user);
-      subscribePayments();
-    } else {
-      showScreen('screen-auth');
-    }
-  });
-}
+});
 
 // ═══════════════════════════════════════════════════
 //  SCREENS
@@ -981,22 +916,8 @@ function showToast(msg, type='success') {
   toastTimer = setTimeout(()=>t.className='', 3500);
 }
 
-// ═══════════════════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════════════════
-window.onload = () => {
-  const cfg = loadStoredConfig();
-  if (cfg) {
-    // Pre-fill inputs
-    Object.keys(cfg).forEach(k => {
-      const el = document.getElementById('cfg-'+k);
-      if (el) el.value = cfg[k];
-    });
-    initFirebase(cfg);
-  } else {
-    showScreen('screen-setup');
-  }
-};
+// flatpickr init on modal open
+window.onload = () => {};
 </script>
 </body>
 </html>
